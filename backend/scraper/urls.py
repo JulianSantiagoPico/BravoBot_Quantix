@@ -139,12 +139,4 @@ URLS = [
         "follow_programs": False,
         "follow_calendar": False,
     },
-    # ── BAJA PRIORIDAD ── Noticias ────────────────────────────────────────────
-    {
-        "url": "https://pascualbravo.edu.co/categoria/novedades/",
-        "categoria": "noticias",
-        "scraper": "static",
-        "follow_programs": False,
-        "follow_calendar": False,
-    },
 ]

@@ -18,7 +18,6 @@ VALID_CATEGORIES = {
     "bienestar",
     "becas",
     "institucional",
-    "noticias",
     "general",
 }
 
@@ -29,7 +28,6 @@ ROUTER_PROMPT = """Clasifica la siguiente pregunta de un aspirante universitario
 - bienestar: preguntas sobre servicios, prácticas profesionales, inglés, bienestar universitario, deportes, gimnasio, salud
 - becas: preguntas sobre becas, financiamiento, apoyo socioeconómico, subsidios
 - institucional: preguntas sobre la institución, historia, filosofía, acreditación, misión, visión
-- noticias: preguntas sobre novedades, eventos recientes
 - general: cualquier otra pregunta
 
 REGLAS:

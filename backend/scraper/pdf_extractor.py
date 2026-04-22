@@ -2,7 +2,7 @@ import logging
 import re
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 import pdfplumber
 import requests
@@ -19,6 +19,15 @@ HEADERS = {
         "Chrome/124.0.0.0 Safari/537.36"
     )
 }
+
+
+PDF_ALLOWLIST_RE = re.compile(r"instructivo", re.IGNORECASE)
+
+
+def is_pdf_allowed(url: str) -> bool:
+    path = unquote(urlparse(url).path)
+    filename = path.rstrip("/").split("/")[-1]
+    return bool(PDF_ALLOWLIST_RE.search(filename))
 
 
 def _safe_filename(url: str) -> str:

@@ -23,6 +23,23 @@ _BOILERPLATE_EXACT = {
     "youtube",
     "si necesitas información adicional del programa académico, escríbenos.",
     "si necesitas informacion adicional del programa academico, escribenos.",
+    "conoce el programa",
+    "conoce la universidad",
+    "¡comienza ahora!",
+    "comienza ahora!",
+    "solicita información",
+    "solicita informacion",
+    "reproducir vídeo",
+    "reproducir video",
+    "ver más noticias",
+    "ver mas noticias",
+    "obten tu titulo de posgrado en una universidad prestigiosa, reconocida y acreditada en alta calidad",
+    "obtén tu título de posgrado en una universidad prestigiosa, reconocida y acreditada en alta calidad",
+    "aspirante",
+    "estudiante",
+    "egresado",
+    "docente/empleado",
+    "niño",
 }
 
 _BOILERPLATE_STARTSWITH = (
@@ -31,6 +48,12 @@ _BOILERPLATE_STARTSWITH = (
     "del 2 de marzo al",
     "estarán abiertas las inscripciones",
     "estaran abiertas las inscripciones",
+    "hasta",
+)
+
+_BOILERPLATE_CONTAINS = (
+    "aspirantes docentes y empleados egresados estudiantes mujeres novedades",
+    "aplica condiciones y restricciones",
 )
 
 
@@ -42,6 +65,8 @@ def _is_boilerplate_line(line: str) -> bool:
     if lower in _BOILERPLATE_EXACT:
         return True
     if any(lower.startswith(p) for p in _BOILERPLATE_STARTSWITH):
+        return True
+    if any(p in lower for p in _BOILERPLATE_CONTAINS):
         return True
     if _URL_RE.match(stripped):
         return True

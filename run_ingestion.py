@@ -14,6 +14,7 @@ import json
 import logging
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
 
 logging.basicConfig(
     level=logging.INFO,
@@ -23,6 +24,8 @@ logging.basicConfig(
 logger = logging.getLogger("run_ingestion")
 
 BASE_DIR = Path(__file__).parent
+load_dotenv(BASE_DIR / "backend" / ".env")
+
 DATA_DIR = BASE_DIR / "backend" / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 RAW_PAGES_PATH = DATA_DIR / "raw_pages.json"
