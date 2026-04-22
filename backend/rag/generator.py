@@ -21,8 +21,11 @@ REGLAS ESTRICTAS:
 4. Responde siempre en español, con tono amable, profesional e institucional.
 5. Sé conciso pero completo. Si la información es extensa, organízala con bullets o secciones cortas.
 6. No menciones que estás usando un "contexto" o "fragmentos" — responde como si conocieras la información directamente.
+7. Si el contexto incluye una sección "MALLA CURRICULAR ESTRUCTURADA", úsala con prioridad para responder preguntas sobre materias, semestres o créditos. Esa sección contiene datos oficiales estructurados.
+8. Cuando respondas sobre mallas curriculares, presenta la información organizada por semestre en formato lista o tabla. Incluye el nombre de la materia y sus créditos.
+9. Si la pregunta abarca múltiples temas (por ejemplo costos y programas), responde todos los aspectos con la información disponible en el contexto.
 
-CONTEXTO RECUPERADO:
+CONTEXTO:
 {contexto}
 
 PREGUNTA DEL ASPIRANTE:
@@ -37,15 +40,48 @@ NO_INFO_RESPONSE = (
 )
 
 
-def generate_response(query: str, chunks: list[dict]) -> dict:
-    if not chunks:
+def _build_contexto(chunks: list[dict], malla_context: dict | None) -> str:
+    parts = []
+
+    if chunks:
+        parts.append("## Información recuperada del sitio oficial")
+        for i, chunk in enumerate(chunks, 1):
+            parts.append(f"[{i}] {chunk['texto']}")
+
+    if malla_context:
+        parts.append("\n## MALLA CURRICULAR ESTRUCTURADA")
+        if "semesters" in malla_context:
+            prog = malla_context
+            parts.append(
+                f"Programa: {prog['name']} | "
+                f"Nivel: {prog.get('level', 'N/A')} | "
+                f"Duración: {prog.get('duration', 'N/A')}"
+            )
+            for sem in prog["semesters"]:
+                materias = ", ".join(
+                    f"{c['name']} ({c['credits']} cr)"
+                    for c in sem.get("courses", [])
+                )
+                parts.append(f"Semestre {sem['semester']}: {materias}")
+        elif "courses" in malla_context:
+            for c in malla_context["courses"]:
+                parts.append(
+                    f"- {c['course_name']} | Programa: {c['program_name']} "
+                    f"| Semestre {c['semester']} | {c['credits']} créditos"
+                )
+
+    return "\n\n".join(parts)
+
+
+def generate_response(
+    query: str,
+    chunks: list[dict],
+    malla_context: dict | None = None,
+) -> dict:
+    if not chunks and not malla_context:
         return {"respuesta": NO_INFO_RESPONSE, "fuentes": []}
 
-    contexto_parts = []
-    for i, chunk in enumerate(chunks, 1):
-        contexto_parts.append(f"[{i}] {chunk['texto']}")
-    contexto = "\n\n".join(contexto_parts)
-
+    contexto = _build_contexto(chunks, malla_context)
     fuentes = list(dict.fromkeys(c["url"] for c in chunks if c.get("url")))
 
     prompt = SYSTEM_PROMPT.format(contexto=contexto, query=query)

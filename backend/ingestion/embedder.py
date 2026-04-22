@@ -75,6 +75,22 @@ def _extract_level(url: str, categoria: str) -> str:
     return "pregrado"
 
 
+def _extract_source_type(categoria: str, tipo: str) -> str:
+    if tipo == "pdf":
+        return "pdf"
+    if categoria == "programas":
+        return "web_program"
+    return "web_general"
+
+
+def _extract_program_slug(url: str, categoria: str) -> str:
+    if categoria != "programas":
+        return ""
+    path = urlparse(url).path.rstrip("/")
+    slug = path.split("/")[-1]
+    return slug.replace("-", " ").replace("_", " ").lower()
+
+
 def build_index(raw_pages: list[dict], reset: bool = False) -> None:
     if not raw_pages:
         logger.warning("No hay documentos para indexar.")
@@ -103,6 +119,8 @@ def build_index(raw_pages: list[dict], reset: bool = False) -> None:
         titulo = _extract_titulo(texto_limpio)
         program_name = _extract_program_name(url, texto_limpio) if categoria == "programas" else ""
         level = _extract_level(url, categoria)
+        source_type = _extract_source_type(categoria, tipo)
+        program_slug = _extract_program_slug(url, categoria)
 
         logger.info(f"Indexando {len(chunks)} chunks de: {url}")
 
@@ -122,6 +140,8 @@ def build_index(raw_pages: list[dict], reset: bool = False) -> None:
                 "titulo": titulo,
                 "program_name": program_name,
                 "level": level,
+                "source_type": source_type,
+                "program_slug": program_slug,
             }
             for i in range(len(chunks))
         ]
