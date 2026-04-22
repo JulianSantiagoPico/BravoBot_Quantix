@@ -1,0 +1,63 @@
+# ═══════════════════════════════════════════════════════════════════
+# BravoBot Quantix — docker-compose.yml
+#
+# Servicios:
+#   frontend  → nginx sirviendo el build de Vite (puerto 80)
+#   backend   → FastAPI + uvicorn (puerto interno 8000)
+#
+# Volúmenes:
+#   chroma_data → persiste la base de datos vectorial ChromaDB
+# ═══════════════════════════════════════════════════════════════════
+
+services:
+
+  # ── Backend FastAPI ───────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bravobot-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env          # GEMINI_API_KEY, CHROMA_PERSIST_DIR, etc.
+    environment:
+      # Sobreescribe la ruta de ChromaDB para que apunte al volumen Docker
+      CHROMA_PERSIST_DIR: /app/chroma_db
+    volumes:
+      - chroma_data:/app/chroma_db
+    networks:
+      - bravobot-net
+    # No expone puerto al host — solo accesible desde nginx en la red interna
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s   # tiempo extra para cargar ChromaDB y modelos
+
+  # ── Frontend nginx ────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bravobot-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"             # acceso público
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - bravobot-net
+
+# ── Redes ────────────────────────────────────────────────────────────
+networks:
+  bravobot-net:
+    driver: bridge
+
+# ── Volúmenes ────────────────────────────────────────────────────────
+volumes:
+  chroma_data:
+    name: bravobot-chroma-data

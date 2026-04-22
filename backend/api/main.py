@@ -4,13 +4,14 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from rag.pipeline import ask
 from rag.retriever import get_collection
 from rag.router import VALID_CATEGORIES
+from rag.sanitizer import sanitize_query, sanitize_session_id
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,8 +30,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:3000"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Accept", "Authorization"],
 )
 
 
@@ -47,8 +48,25 @@ async def startup_event():
 
 
 class ChatRequest(BaseModel):
-    query: str
-    session_id: str | None = None
+    query: str = Field(..., min_length=1, max_length=500, description="Pregunta del aspirante (máx 500 caracteres)")
+    session_id: str | None = Field(None, max_length=64, description="ID de sesión alfanumérico (máx 64 caracteres)")
+
+    @field_validator("query")
+    @classmethod
+    def query_must_not_be_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("La query no puede ser solo espacios en blanco.")
+        return v
+
+    @field_validator("session_id")
+    @classmethod
+    def session_id_format(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        import re
+        if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", v):
+            raise ValueError("session_id inválido. Solo alfanuméricos, guiones y guiones bajos (máx 64 chars).")
+        return v
 
 
 class ChatResponse(BaseModel):
@@ -62,41 +80,57 @@ class ChatResponse(BaseModel):
 # Almacenamiento en memoria para el historial de conversaciones
 # Formato: { "session_id": [{"role": "user", "text": "..." }, {"role": "model", "text": "..."}] }
 sessions: dict[str, list[dict]] = {}
-MAX_HISTORY_LENGTH = 10  # Máximo número de mensajes a guardar por sesión
+MAX_HISTORY_LENGTH = 10   # Máximo de mensajes por sesión
+MAX_SESSIONS = 1000       # Máximo de sesiones activas en memoria
 
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    if not request.query.strip():
-        raise HTTPException(status_code=400, detail="La query no puede estar vacía.")
-    
+    # Sanitizar inputs (segunda capa de defensa tras la validación Pydantic)
     try:
-        session_id = request.session_id
+        clean_query = sanitize_query(request.query)
+        clean_session_id = sanitize_session_id(request.session_id)
+    except ValueError as ve:
+        raise HTTPException(status_code=422, detail=str(ve))
+
+    try:
         history = []
-        
-        if session_id:
-            if session_id not in sessions:
-                sessions[session_id] = []
-            history = sessions[session_id]
+
+        if clean_session_id:
+            # Protección contra memory flooding: limitar sesiones activas
+            if clean_session_id not in sessions and len(sessions) >= MAX_SESSIONS:
+                logger.warning(
+                    f"[SECURITY] Límite de sesiones activas ({MAX_SESSIONS}) alcanzado. "
+                    "Rechazando nueva sesión."
+                )
+                raise HTTPException(
+                    status_code=429,
+                    detail="Demasiadas sesiones activas. Inténtalo más tarde.",
+                )
+            if clean_session_id not in sessions:
+                sessions[clean_session_id] = []
+            history = sessions[clean_session_id]
 
         # Llamada al pipeline RAG con historial
-        result = ask(request.query, history=history)
+        result = ask(clean_query, history=history)
 
         # Actualizar historial
-        if session_id:
-            sessions[session_id].append({"role": "user", "text": request.query})
-            sessions[session_id].append({"role": "model", "text": result["respuesta"]})
+        if clean_session_id:
+            sessions[clean_session_id].append({"role": "user", "text": clean_query})
+            sessions[clean_session_id].append({"role": "model", "text": result["respuesta"]})
             # Mantener solo los últimos N mensajes
-            if len(sessions[session_id]) > MAX_HISTORY_LENGTH:
-                sessions[session_id] = sessions[session_id][-MAX_HISTORY_LENGTH:]
+            if len(sessions[clean_session_id]) > MAX_HISTORY_LENGTH:
+                sessions[clean_session_id] = sessions[clean_session_id][-MAX_HISTORY_LENGTH:]
 
         return ChatResponse(
             respuesta=result["respuesta"],
             fuentes=result["fuentes"],
             categoria=result["categoria"],
             categorias=result.get("categorias", [result["categoria"]]),
-            session_id=session_id
+            session_id=clean_session_id,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error(f"Error en /chat: {exc}")
         raise HTTPException(status_code=500, detail="Error interno del servidor.")

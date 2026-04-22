@@ -4,6 +4,8 @@ import os
 from dotenv import load_dotenv
 from google import genai
 
+from .sanitizer import sanitize_query
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -47,7 +49,7 @@ Pregunta: ¿Cuáles son los derechos pecuniarios? → costos
 Pregunta: ¿Cuáles son los requisitos de admisión para una maestría? → admisiones+programas
 Pregunta: ¿Qué servicios ofrece bienestar universitario? → bienestar
 
-Pregunta: {query}"""
+Pregunta: <PREGUNTA_ASPIRANTE>{query}</PREGUNTA_ASPIRANTE>"""
 
 
 def classify_query(query: str) -> list[str]:
@@ -56,13 +58,14 @@ def classify_query(query: str) -> list[str]:
         
         # Estrategia de Fallback: Si uno falla, intenta con el siguiente
         modelos_fallback = [ROUTER_MODEL, "gemini-2.5-flash", "gemini-1.5-flash"]
+        safe_query = sanitize_query(query)
         response = None
-        
+
         for model_name in modelos_fallback:
             try:
                 response = client.models.generate_content(
                     model=model_name,
-                    contents=ROUTER_PROMPT.format(query=query),
+                    contents=ROUTER_PROMPT.format(query=safe_query),
                 )
                 logger.debug(f"Router usó exitosamente: {model_name}")
                 break # Éxito, salimos del bucle
