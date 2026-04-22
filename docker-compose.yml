@@ -18,11 +18,16 @@ services:
       dockerfile: Dockerfile
     container_name: bravobot-backend
     restart: unless-stopped
-    env_file:
-      - ./backend/.env          # GEMINI_API_KEY, CHROMA_PERSIST_DIR, etc.
     environment:
+      # Variables inyectadas por Dokploy a nivel host
+      - GEMINI_API_KEY
+      - COLLECTION_NAME
+      - CHUNK_SIZE
+      - CHUNK_OVERLAP
+      - TOP_K
+      - EMBEDDING_MODEL
       # Sobreescribe la ruta de ChromaDB para que apunte al volumen Docker
-      CHROMA_PERSIST_DIR: /app/chroma_db
+      - CHROMA_PERSIST_DIR=/app/chroma_db
     volumes:
       - chroma_data:/app/chroma_db
     networks:
