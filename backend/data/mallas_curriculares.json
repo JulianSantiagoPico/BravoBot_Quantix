@@ -3469,32 +3469,26 @@
           "courses": [
             {
               "name": "Matemáticas Operativas",
-              "code": "FB0001",
               "credits": 4
             },
             {
               "name": "Herramientas Ofimáticas",
-              "code": "EA0354",
               "credits": 2
             },
             {
               "name": "Introducción a la Tecnología",
-              "code": "EA0594",
               "credits": 4
             },
             {
               "name": "Herramientas CAD/CAE I",
-              "code": "EA0596",
               "credits": 2
             },
             {
               "name": "Lengua Materna",
-              "code": "FB0004",
               "credits": 2
             },
             {
               "name": "Desarrollo Humano y Social",
-              "code": "FB0003",
               "credits": 2
             }
           ]
@@ -3505,27 +3499,22 @@
           "courses": [
             {
               "name": "Cálculo Diferencial",
-              "code": "FB0005",
               "credits": 4
             },
             {
               "name": "Física Mecánica",
-              "code": "FB0006",
               "credits": 4
             },
             {
               "name": "Análisis de Circuitos I",
-              "code": "EA0359",
               "credits": 4
             },
             {
               "name": "Herramientas CAD/CAE II",
-              "code": "AE0602",
               "credits": 2
             },
             {
               "name": "Constitución y Participación Ciudadana",
-              "code": "FB0007",
               "credits": 2
             }
           ]
