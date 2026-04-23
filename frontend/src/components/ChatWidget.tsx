@@ -333,26 +333,25 @@ export default function ChatWidget() {
               onClick={handleNewConversation}
               style={{
                 background: 'rgba(255,255,255,0.1)',
-                border: '1px solid rgba(255,255,255,0.2)',
+                border: 'none',
                 borderRadius: '8px',
-                color: 'rgba(255,255,255,0.7)',
-                fontSize: '11px',
-                padding: '4px 10px',
+                color: '#fff',
                 cursor: 'pointer',
-                fontFamily: '"Open Sans", sans-serif',
-                transition: 'all 0.2s',
+                padding: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background 0.2s',
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.18)'
-                e.currentTarget.style.color = '#fff'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
-                e.currentTarget.style.color = 'rgba(255,255,255,0.7)'
-              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.2)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+              aria-label="Nueva conversación"
               title="Nueva conversación"
             >
-              Nueva
+              {/* Pencil / new-chat icon */}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+              </svg>
             </button>
           )}
 
