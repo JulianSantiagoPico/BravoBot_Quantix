@@ -5,17 +5,12 @@ from urllib.parse import urljoin, urlparse
 
 from playwright.async_api import async_playwright
 
-from .pdf_extractor import extract_pdf
+from .pdf_extractor import extract_pdf, is_pdf_allowed
 from .urls import PROGRAM_URL_PATTERNS
 
 logger = logging.getLogger(__name__)
 
 CALENDAR_PATTERN = re.compile(r"(\d{4})[^\d]*(1|2)", re.IGNORECASE)
-
-PDF_BLOCKLIST_RE = re.compile(
-    r"acuerdo[_-]directivo|reglamento[_-]propiedad|aprobacion[_-]men|/malla[_-]",
-    re.IGNORECASE,
-)
 
 
 def _is_same_domain(url: str, base: str) -> bool:
@@ -75,7 +70,7 @@ async def _extract_pdf_links_from_page(page, base_url: str) -> list[str]:
         }"""
     )
     normalized = [urljoin(base_url, h) for h in hrefs]
-    filtered = [u for u in normalized if not PDF_BLOCKLIST_RE.search(urlparse(u).path)]
+    filtered = [u for u in normalized if is_pdf_allowed(u)]
     return list(dict.fromkeys(filtered))
 
 

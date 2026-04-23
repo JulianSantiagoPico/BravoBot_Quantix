@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 
 import chromadb
 from dotenv import load_dotenv
@@ -12,7 +13,8 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
+_DEFAULT_CHROMA = str(Path(__file__).resolve().parent.parent / "chroma_db")
+CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", _DEFAULT_CHROMA)
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "bravobot")
 TOP_K = int(os.getenv("TOP_K", "5"))
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
@@ -59,7 +61,7 @@ def expand_query(query: str) -> list[str]:
     if not EXPAND_QUERIES or not GEMINI_API_KEY:
         return queries
     try:
-        safe_query = sanitize_query(search_query)
+        safe_query = sanitize_query(query)
         client = genai.Client(api_key=GEMINI_API_KEY)
 
         modelos_fallback = [ROUTER_MODEL, "gemini-2.5-flash", "gemini-1.5-flash"]
@@ -177,15 +179,22 @@ def retrieve(query: str, categorias: list[str], top_k: int = TOP_K) -> list[dict
     else:
         filters = [{"categoria": {"$eq": c}} for c in non_general]
 
-    # 4. Retrieval ampliado: top_k * 3 por cada (query, filtro)
+    # 4. Retrieval ampliado: búsqueda dual (con filtro + sin filtro)
     n_candidates = top_k * 3
     all_ranked_lists: list[list[tuple[str, dict]]] = []
 
+    # 4a. Búsqueda CON filtro de categoría
     for emb in embeddings:
         for filt in filters:
             ranked = _query_collection(emb, filt, n_candidates)
             if ranked:
                 all_ranked_lists.append(ranked)
+
+    # 4b. Búsqueda SIN filtro (para capturar PDFs relevantes sin restricción de categoría)
+    for emb in embeddings:
+        ranked = _query_collection(emb, None, n_candidates)
+        if ranked:
+            all_ranked_lists.append(ranked)
 
     if not all_ranked_lists:
         logger.warning("No se obtuvieron resultados de ChromaDB")

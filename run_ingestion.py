@@ -15,6 +15,8 @@ import logging
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -26,6 +28,8 @@ BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "backend" / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 RAW_PAGES_PATH = DATA_DIR / "raw_pages.json"
+
+load_dotenv(BASE_DIR / "backend" / ".env")
 
 sys.path.insert(0, str(BASE_DIR / "backend"))
 
@@ -53,6 +57,8 @@ async def run_scraping() -> list[dict]:
         if scraper_type == "static":
             docs, discovered = scrape_static(url, categoria, follow_programs=follow_programs)
             logger.info(f"  → {len(docs)} documento(s) obtenidos de {url}")
+            for doc in docs:
+                visited.add(doc["url"])
             all_docs.extend(docs)
 
             for prog_url in discovered:
@@ -65,6 +71,8 @@ async def run_scraping() -> list[dict]:
                     categoria=categoria,
                 )
                 logger.info(f"    → {len(prog_docs)} documento(s) de {prog_url}")
+                for doc in prog_docs:
+                    visited.add(doc["url"])
                 all_docs.extend(prog_docs)
         else:
             docs = await scrape_dynamic(
@@ -75,10 +83,24 @@ async def run_scraping() -> list[dict]:
                 visited=visited,
             )
             logger.info(f"  → {len(docs)} documento(s) obtenidos de {url}")
+            for doc in docs:
+                visited.add(doc["url"])
             all_docs.extend(docs)
 
-    logger.info(f"\nTotal documentos scrapeados: {len(all_docs)}")
-    return all_docs
+    # Deduplicar por URL preservando el primer documento encontrado
+    seen: set[str] = set()
+    unique_docs = []
+    for doc in all_docs:
+        doc_url = doc.get("url", "")
+        if doc_url not in seen:
+            seen.add(doc_url)
+            unique_docs.append(doc)
+
+    if len(unique_docs) < len(all_docs):
+        logger.info(f"Deduplicación: {len(all_docs)} → {len(unique_docs)} documentos únicos")
+
+    logger.info(f"\nTotal documentos scrapeados: {len(unique_docs)}")
+    return unique_docs
 
 
 def save_raw(docs: list[dict]) -> None:

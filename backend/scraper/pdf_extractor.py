@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 PDF_DIR = Path(__file__).parent.parent / "data" / "pdfs"
 PDF_DIR.mkdir(parents=True, exist_ok=True)
 
+PDF_ALLOWLIST_RE = re.compile(r"instructivo", re.IGNORECASE)
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -19,6 +21,11 @@ HEADERS = {
         "Chrome/124.0.0.0 Safari/537.36"
     )
 }
+
+
+def is_pdf_allowed(url: str) -> bool:
+    path = urlparse(url).path
+    return bool(PDF_ALLOWLIST_RE.search(path))
 
 
 def _safe_filename(url: str) -> str:

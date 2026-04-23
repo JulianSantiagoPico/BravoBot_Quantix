@@ -75,13 +75,6 @@ URLS = [
         "follow_calendar": False,
     },
     {
-        "url": "https://pascualbravo.edu.co/academico/bienestar-universitario/servicios/promocion-socioeconomica/",
-        "categoria": "bienestar",
-        "scraper": "static",
-        "follow_programs": False,
-        "follow_calendar": False,
-    },
-    {
         "url": "https://pascualbravo.edu.co/academico/vicerrectoria-de-docencia/practicas-profesionales/",
         "categoria": "bienestar",
         "scraper": "static",
@@ -104,7 +97,14 @@ URLS = [
         "follow_calendar": False,
     },
     {
-        "url": "https://pascualbravo.edu.co/ayuda/glosario-2/",
+        "url": "https://pascualbravo.edu.co/extension/educacion-continua/programa-sillas-vacias/",
+        "categoria": "becas",
+        "scraper": "static",
+        "follow_programs": False,
+        "follow_calendar": False,
+    },
+    {
+        "url": "https://pascualbravo.edu.co/ayuda/directorio/",
         "categoria": "institucional",
         "scraper": "static",
         "follow_programs": False,
@@ -126,23 +126,8 @@ URLS = [
         "follow_calendar": False,
     },
     {
-        "url": "https://pascualbravo.edu.co/direccionamiento-estrategico/filosofia-institucional/",
-        "categoria": "institucional",
-        "scraper": "static",
-        "follow_programs": False,
-        "follow_calendar": False,
-    },
-    {
         "url": "https://pascualbravo.edu.co/acreditacioninstitucional/",
         "categoria": "institucional",
-        "scraper": "static",
-        "follow_programs": False,
-        "follow_calendar": False,
-    },
-    # ── BAJA PRIORIDAD ── Noticias ────────────────────────────────────────────
-    {
-        "url": "https://pascualbravo.edu.co/categoria/novedades/",
-        "categoria": "noticias",
         "scraper": "static",
         "follow_programs": False,
         "follow_calendar": False,

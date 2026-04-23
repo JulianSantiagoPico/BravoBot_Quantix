@@ -6,7 +6,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
-from .pdf_extractor import extract_pdf
+from .pdf_extractor import extract_pdf, is_pdf_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +39,6 @@ NOISE_DIV_CLASSES = {
     "modal-overlay", "modal-backdrop",
 }
 
-PDF_BLOCKLIST_RE = re.compile(
-    r"acuerdo[_-]directivo|reglamento[_-]propiedad|aprobacion[_-]men|/malla[_-]",
-    re.IGNORECASE,
-)
-
-
 def _remove_noise(soup: BeautifulSoup) -> None:
     for tag in soup(NOISE_TAGS):
         tag.decompose()
@@ -59,11 +53,6 @@ def _remove_noise(soup: BeautifulSoup) -> None:
             pass
 
 
-def _is_pdf_blocked(url: str) -> bool:
-    path = urlparse(url).path
-    return bool(PDF_BLOCKLIST_RE.search(path))
-
-
 def _extract_pdf_links(soup: BeautifulSoup, base_url: str) -> list[str]:
     pdf_urls = []
     for tag, attr in PDF_SELECTORS:
@@ -71,7 +60,7 @@ def _extract_pdf_links(soup: BeautifulSoup, base_url: str) -> list[str]:
             val = el.get(attr, "") or ""
             if val.lower().endswith(".pdf"):
                 full = urljoin(base_url, val)
-                if not _is_pdf_blocked(full):
+                if is_pdf_allowed(full):
                     pdf_urls.append(full)
     return list(dict.fromkeys(pdf_urls))
 
@@ -133,17 +122,18 @@ def scrape_static(
 
         _remove_noise(soup)
 
-        texto = _extract_text(soup)
-        if texto.strip():
-            docs.append(
-                {
-                    "url": url,
-                    "categoria": categoria,
-                    "texto": texto,
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "tipo": "web",
-                }
-            )
+        if not follow_programs:
+            texto = _extract_text(soup)
+            if texto.strip():
+                docs.append(
+                    {
+                        "url": url,
+                        "categoria": categoria,
+                        "texto": texto,
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "tipo": "web",
+                    }
+                )
 
         for pdf_url in _extract_pdf_links(soup, url):
             doc = extract_pdf(pdf_url, categoria)

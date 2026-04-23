@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import uuid
+from pathlib import Path
 from urllib.parse import urlparse
 
 import chromadb
@@ -15,7 +16,8 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
+_DEFAULT_CHROMA = str(Path(__file__).resolve().parent.parent / "chroma_db")
+CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", _DEFAULT_CHROMA)
 COLLECTION_NAME = os.getenv("COLLECTION_NAME", "bravobot")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
 

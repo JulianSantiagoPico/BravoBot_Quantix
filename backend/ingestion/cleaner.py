@@ -23,6 +23,17 @@ _BOILERPLATE_EXACT = {
     "youtube",
     "si necesitas información adicional del programa académico, escríbenos.",
     "si necesitas informacion adicional del programa academico, escribenos.",
+    "conoce el programa",
+    "conoce la universidad",
+    "¡comienza ahora!",
+    "comienza ahora!",
+    "solicita información",
+    "solicita informacion",
+    "reproducir vídeo",
+    "reproducir video",
+    "ver más noticias",
+    "ver mas noticias",
+    "obten tu titulo de posgrado en una universidad prestigiosa, reconocida y acreditada en alta calidad",
 }
 
 _BOILERPLATE_STARTSWITH = (
@@ -31,6 +42,12 @@ _BOILERPLATE_STARTSWITH = (
     "del 2 de marzo al",
     "estarán abiertas las inscripciones",
     "estaran abiertas las inscripciones",
+    "hasta",
+)
+
+_NEWS_TAGS_RE = re.compile(
+    r"aspirantes.*docentes.*empleados.*egresados.*estudiantes.*mujeres.*novedades",
+    re.IGNORECASE,
 )
 
 
@@ -46,6 +63,8 @@ def _is_boilerplate_line(line: str) -> bool:
     if _URL_RE.match(stripped):
         return True
     if _BREADCRUMB_RE.match(stripped):
+        return True
+    if _NEWS_TAGS_RE.search(lower):
         return True
     return False
 
