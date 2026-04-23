@@ -17,7 +17,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # URL de nuestra API local FastAPI
-API_URL = "http://localhost:8000/chat"
+API_URL = os.getenv("API_URL", "http://localhost:8000/chat")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja el comando /start"""

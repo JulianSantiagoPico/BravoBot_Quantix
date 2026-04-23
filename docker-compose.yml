@@ -52,6 +52,24 @@ services:
     networks:
       - bravobot-net
 
+  # ── Bot de Telegram ────────────────────────────────────────────────
+  telegram-bot:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bravobot-telegram
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      - API_URL=http://backend:8000/chat
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: ["python", "telegram_bot.py"]
+    networks:
+      - bravobot-net
+
 # ── Redes ────────────────────────────────────────────────────────────
 networks:
   bravobot-net:
