@@ -44,29 +44,37 @@ QUERY REESCRITA:"""
 
 _COMPARISON_TOP_K_MULTIPLIER = 2
 
-_PROGRAMS_LISTING_KEYWORDS = {
-    "qué programas", "que programas",
-    "qué carreras", "que carreras",
+# Verbos/frases que indican que el usuario quiere un LISTADO general
+_LISTING_VERBS = {
+    "qué", "que", "cuáles", "cuales", "cuál", "cual",
+    "ofrecen", "tienen", "hay", "existe", "existen", "ofrecen",
+    "disponibles", "disponible", "oferta",
+    "puedo estudiar", "puedo hacer", "puedo cursar",
+    "estudiar", "hacer en", "hacer allí", "hacer alli",
+}
+
+# Tipos de programa — cualquiera de estos + un verbo de listado → detección
+_PROGRAM_TYPE_KEYWORDS = {
+    "programa", "programas",
+    "carrera", "carreras",
+    "pregrado", "pregrados",
+    "posgrado", "posgrados",
+    "maestría", "maestria", "maestrías", "maestrias",
+    "especialización", "especializacion", "especializaciones",
+    "doctorado", "doctorados",
+    "técnico", "tecnico", "técnicos", "tecnicos",
+    "tecnológico", "tecnologico", "tecnológicos", "tecnologicos",
+    "tecnología", "tecnologia", "tecnologías", "tecnologias",
+    "ingeniería", "ingenieria", "ingenierías", "ingenierias",
+    "licenciatura", "licenciaturas",
     "oferta académica", "oferta academica",
-    "programas disponibles", "carreras disponibles",
-    "programas ofrecen", "carreras ofrecen",
-    "qué estudiar", "que estudiar",
-    "qué puedo estudiar", "que puedo estudiar",
-    "qué puedo hacer", "que puedo hacer",
-    "cuáles son los programas", "cuales son los programas",
-    "cuáles son las carreras", "cuales son las carreras",
 }
 
-_POSGRADO_KEYWORDS = {
-    "posgrado", "posgrados", "maestría", "maestria",
-    "especialización", "especializacion", "maestrías", "maestrias",
-    "especializaciones",
-}
-
-_PREGRADO_KEYWORDS = {
-    "pregrado", "pregrados", "carrera", "carreras",
-    "tecnología", "tecnologia", "ingeniería", "ingenieria",
-    "licenciatura", "técnico", "tecnico",
+_POSGRADO_TYPE_KEYWORDS = {
+    "posgrado", "posgrados",
+    "maestría", "maestria", "maestrías", "maestrias",
+    "especialización", "especializacion", "especializaciones",
+    "doctorado", "doctorados",
 }
 
 _PROGRAMS_URLS = {
@@ -78,15 +86,21 @@ _PROGRAMS_URLS = {
 def _detect_programs_listing(query: str) -> str | None:
     """
     Detecta si la query es una pregunta sobre el listado general de programas.
+    Estrategia: debe haber al menos un verbo/frase de listado Y un tipo de programa.
     Retorna 'pregrados', 'posgrados', 'ambos' o None.
     """
     q = query.lower()
-    is_listing = any(kw in q for kw in _PROGRAMS_LISTING_KEYWORDS)
-    if not is_listing:
+
+    has_listing_verb = any(kw in q for kw in _LISTING_VERBS)
+    has_program_type = any(kw in q for kw in _PROGRAM_TYPE_KEYWORDS)
+
+    if not (has_listing_verb and has_program_type):
         return None
 
-    has_posgrado = any(kw in q for kw in _POSGRADO_KEYWORDS)
-    has_pregrado = any(kw in q for kw in _PREGRADO_KEYWORDS)
+    has_posgrado = any(kw in q for kw in _POSGRADO_TYPE_KEYWORDS)
+    has_pregrado = any(
+        kw in q for kw in (_PROGRAM_TYPE_KEYWORDS - _POSGRADO_TYPE_KEYWORDS)
+    )
 
     if has_posgrado and has_pregrado:
         return "ambos"
