@@ -83,7 +83,7 @@ LLM multi-etiqueta que asigna hasta **3 categorías simultáneas**:
 | `institucional` | Historia, acreditación, misión, visión |
 | `general` | Cualquier otra pregunta |
 
-Estrategia de fallback de modelos: `gemini-3.1-flash-lite-preview` → `gemini-2.5-flash` → `gemini-1.5-flash`.
+Estrategia de fallback de modelos: `gemini-3.1-flash-lite-preview` → `gemini-2.5-flash` → `gemini-2.5-flash-lite`.
 
 ### 5. Recuperación Híbrida (`retriever.py`)
 Pipeline de recuperación con múltiples capas:
@@ -109,7 +109,7 @@ El resultado se inyecta como sección estructurada `## MALLA CURRICULAR ESTRUCTU
 - Usa `SYSTEM_PROMPT` con **12 reglas** explícitas: fidelidad al contexto, honestidad sobre datos faltantes, prohibición de inventar fechas futuras, manejo de programas similares, seguridad contra injection en el prompt.
 - Prompt especial `NO_INFO_PROMPT` cuando no hay contexto disponible: genera orientación contextualizada (no un mensaje genérico).
 - Prompt `CONVERSATIONAL_PROMPT` para meta-operaciones sin RAG.
-- Fallback de modelos: `gemini-3.1-flash-lite-preview` → `gemini-2.5-flash` → `gemini-1.5-flash`.
+- Fallback de modelos: `gemini-3.1-flash-lite-preview` → `gemini-2.5-flash` → `gemini-2.5-flash-lite`.
 - Fallback de texto estático si todos los modelos fallan.
 
 ---

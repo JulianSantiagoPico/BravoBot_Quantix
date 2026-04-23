@@ -64,7 +64,7 @@ def expand_query(query: str) -> list[str]:
         safe_query = sanitize_query(query)
         client = genai.Client(api_key=GEMINI_API_KEY)
 
-        modelos_fallback = [ROUTER_MODEL, "gemini-2.5-flash", "gemini-1.5-flash"]
+        modelos_fallback = [ROUTER_MODEL, "gemini-2.5-flash", "gemini-2.5-flash-lite"]
         response = None
 
         for model_name in modelos_fallback:

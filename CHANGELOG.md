@@ -82,7 +82,7 @@ En esta versión los embeddings se generaban mediante llamada a la API de Google
 
 ### 2.3 Cadena de fallback de modelos
 
-**Cambio:** Todo uso de LLM (router, retriever, pipeline, generator) pasó a usar la cadena `gemini-3.1-flash-lite-preview` → `gemini-2.5-flash` → `gemini-1.5-flash`.
+**Cambio:** Todo uso de LLM (router, retriever, pipeline, generator) pasó a usar la cadena `gemini-3.1-flash-lite-preview` → `gemini-2.5-flash` → `gemini-2.5-flash-lite`.
 
 **Razones:**
 - `gemini-3.1-flash-lite-preview` es el modelo más rápido y económico; se intenta primero.

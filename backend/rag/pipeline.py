@@ -44,6 +44,56 @@ QUERY REESCRITA:"""
 
 _COMPARISON_TOP_K_MULTIPLIER = 2
 
+_PROGRAMS_LISTING_KEYWORDS = {
+    "qué programas", "que programas",
+    "qué carreras", "que carreras",
+    "oferta académica", "oferta academica",
+    "programas disponibles", "carreras disponibles",
+    "programas ofrecen", "carreras ofrecen",
+    "qué estudiar", "que estudiar",
+    "qué puedo estudiar", "que puedo estudiar",
+    "qué puedo hacer", "que puedo hacer",
+    "cuáles son los programas", "cuales son los programas",
+    "cuáles son las carreras", "cuales son las carreras",
+}
+
+_POSGRADO_KEYWORDS = {
+    "posgrado", "posgrados", "maestría", "maestria",
+    "especialización", "especializacion", "maestrías", "maestrias",
+    "especializaciones",
+}
+
+_PREGRADO_KEYWORDS = {
+    "pregrado", "pregrados", "carrera", "carreras",
+    "tecnología", "tecnologia", "ingeniería", "ingenieria",
+    "licenciatura", "técnico", "tecnico",
+}
+
+_PROGRAMS_URLS = {
+    "pregrados": "https://pascualbravo.edu.co/pregrados/",
+    "posgrados": "https://pascualbravo.edu.co/posgrados/",
+}
+
+
+def _detect_programs_listing(query: str) -> str | None:
+    """
+    Detecta si la query es una pregunta sobre el listado general de programas.
+    Retorna 'pregrados', 'posgrados', 'ambos' o None.
+    """
+    q = query.lower()
+    is_listing = any(kw in q for kw in _PROGRAMS_LISTING_KEYWORDS)
+    if not is_listing:
+        return None
+
+    has_posgrado = any(kw in q for kw in _POSGRADO_KEYWORDS)
+    has_pregrado = any(kw in q for kw in _PREGRADO_KEYWORDS)
+
+    if has_posgrado and has_pregrado:
+        return "ambos"
+    if has_posgrado:
+        return "posgrados"
+    return "pregrados"
+
 
 def _needs_malla(query: str, categorias: list[str]) -> bool:
     # Eliminamos la restricción estricta de la categoría "programas"
@@ -85,7 +135,7 @@ def _rewrite_followup(query: str, history: list[dict]) -> str:
         prompt = _REWRITE_PROMPT.format(historial=historial_str, query=safe_query)
 
         client = genai.Client(api_key=GEMINI_API_KEY)
-        modelos_fallback = [_REWRITE_MODEL, "gemini-2.5-flash", "gemini-1.5-flash"]
+        modelos_fallback = [_REWRITE_MODEL, "gemini-2.5-flash", "gemini-2.5-flash-lite"]
         for model_name in modelos_fallback:
             try:
                 response = client.models.generate_content(model=model_name, contents=prompt)
@@ -141,12 +191,23 @@ def ask(query: str, history: list[dict] = None) -> dict:
         logger.info("Activando malla_lookup para query de malla/materias")
         malla_context = _build_malla_context(effective_query)
 
+    listing_type = _detect_programs_listing(effective_query)
+    programs_link: str | None = None
+    if listing_type == "ambos":
+        programs_link = (
+            f"Pregrados: {_PROGRAMS_URLS['pregrados']} | "
+            f"Posgrados: {_PROGRAMS_URLS['posgrados']}"
+        )
+    elif listing_type in _PROGRAMS_URLS:
+        programs_link = _PROGRAMS_URLS[listing_type]
+
     result = generate_response(
         query,
         chunks,
         malla_context=malla_context,
         history=history,
         intent=intent,
+        programs_link=programs_link,
     )
 
     return {

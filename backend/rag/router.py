@@ -57,7 +57,7 @@ def classify_query(query: str) -> list[str]:
         client = genai.Client(api_key=GEMINI_API_KEY)
         
         # Estrategia de Fallback: Si uno falla, intenta con el siguiente
-        modelos_fallback = [ROUTER_MODEL, "gemini-2.5-flash", "gemini-1.5-flash"]
+        modelos_fallback = [ROUTER_MODEL, "gemini-2.5-flash", "gemini-2.5-flash-lite"]
         safe_query = sanitize_query(query)
         response = None
 
