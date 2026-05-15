@@ -201,6 +201,23 @@ La pantalla de bienvenida muestra chips de consultas frecuentes organizados en c
 
 ---
 
+## Sistema de Retroalimentación (Feedback)
+
+El proyecto incluye un módulo completo de feedback de los usuarios, diseñado para no interrumpir el flujo de la conversación, con dos niveles de evaluación:
+
+1. **Feedback por Mensaje (Micro):** Botones flotantes (👍/👎) debajo de cada respuesta del bot (excluyendo el wizard).
+   - Registra el id del mensaje, la query del usuario previa, la respuesta del bot, la categoría asignada y la intención detectada.
+2. **Feedback por Sesión (Macro):** Un modal que se despliega al cerrar el chat (✖️) **únicamente** si la sesión tuvo al menos 2 respuestas del bot. 
+   - Permite dar una calificación de 1 a 5 estrellas y dejar un comentario opcional.
+   - Registra estadísticas de la sesión (número total de mensajes, cantidad de intervenciones del bot, y categorías cubiertas).
+
+**Almacenamiento (Backend):**
+- Utiliza **SQLite** como base de datos de persistencia local (`feedback.db`).
+- Los datos se guardan en el contenedor bajo un volumen montado (`feedback_data`), asegurando que la información sobreviva a los reinicios de Docker.
+- Se puede exportar la información en formato **CSV** de forma segura mediante un endpoint protegido por un token secreto (`FEEDBACK_EXPORT_SECRET`).
+
+---
+
 ## API REST
 
 | Método | Endpoint | Descripción |
@@ -208,6 +225,9 @@ La pantalla de bienvenida muestra chips de consultas frecuentes organizados en c
 | `POST` | `/chat` | Consulta al pipeline RAG. Cuerpo: `{query, session_id?}` |
 | `GET` | `/health` | Estado del servicio |
 | `GET` | `/categorias` | Lista de categorías disponibles |
+| `POST` | `/feedback/message` | Envío de voto 👍/👎 para un mensaje específico |
+| `POST` | `/feedback/session` | Envío de calificación ⭐ 1-5 y comentario al cierre de la sesión |
+| `GET` | `/feedback/export` | Exporta la base de datos a CSV (`?secret=...&tabla=session\|message`) |
 
 **Respuesta de `/chat`:**
 ```json
@@ -259,10 +279,10 @@ docker compose down
 | Servicio | Puerto | Descripción |
 |----------|--------|-------------|
 | `bravobot-backend` | interno :8000 | FastAPI, solo accesible desde nginx |
-| `bravobot-frontend` | público :80 | nginx + build de Vite + reverse proxy a /chat |
+| `bravobot-frontend` | público :80 | nginx + build de Vite + reverse proxy a /chat, /health, /feedback |
 | `bravobot-telegram` | — | Bot de Telegram como worker independiente |
 
-- **Volumen persistente** `bravobot-chroma-data` para ChromaDB.
+- **Volúmenes persistentes:** `bravobot-chroma-data` para ChromaDB y `bravobot-feedback-data` para la BD SQLite de retroalimentación.
 - **Health check** del backend cada 30 s; el frontend y el bot de Telegram esperan a que el backend esté saludable antes de arrancar.
 
 ---
@@ -391,6 +411,8 @@ BravoBot/
 | `CHUNK_OVERLAP` | Overlap entre chunks | `50` |
 | `TELEGRAM_BOT_TOKEN` | Token del bot de Telegram | opcional |
 | `API_URL` | URL del backend para el bot de Telegram | `http://localhost:8000/chat` |
+| `FEEDBACK_DB_PATH` | Ruta para la base de datos de SQLite del feedback | `./feedback/feedback.db` |
+| `FEEDBACK_EXPORT_SECRET`| Contraseña para descargar los CSVs | **requerido** |
 
 ### Frontend (`frontend/.env`)
 

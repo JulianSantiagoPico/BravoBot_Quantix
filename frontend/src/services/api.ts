@@ -7,7 +7,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import axios, { AxiosError } from 'axios'
-import type { ChatRequest, ChatResponse, HealthResponse, CategoriasResponse } from './types'
+import type {
+  ChatRequest,
+  ChatResponse,
+  HealthResponse,
+  CategoriasResponse,
+  MessageFeedbackPayload,
+  SessionFeedbackPayload,
+} from './types'
 
 // Base URL: vacía en Docker (mismo origen via nginx), o URL explícita en dev
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
@@ -85,5 +92,29 @@ export async function getCategorias(): Promise<CategoriasResponse> {
     return data
   } catch (err) {
     throw parseError(err)
+  }
+}
+
+/**
+ * Envía el voto 👍/👎 de un mensaje individual del bot.
+ * Silencia errores para no interrumpir la UX.
+ */
+export async function submitMessageFeedback(payload: MessageFeedbackPayload): Promise<void> {
+  try {
+    await client.post('/feedback/message', payload)
+  } catch {
+    // Feedback es best-effort — no interrumpir el chat si falla
+  }
+}
+
+/**
+ * Envía la calificación 1–5 ⭐ de la sesión completa.
+ * Se llama al cerrar el chat cuando hay ≥2 respuestas del bot.
+ */
+export async function submitSessionFeedback(payload: SessionFeedbackPayload): Promise<void> {
+  try {
+    await client.post('/feedback/session', payload)
+  } catch {
+    // Feedback es best-effort — no interrumpir el flujo de cierre
   }
 }

@@ -7,6 +7,7 @@ interface ChatWindowProps {
   onSuggestion: (text: string) => void
   onWizardStart: () => void
   onWizardAnswer: (value: string) => void
+  onMessageFeedback: (msg: Message, rating: 1 | -1) => Promise<void>
 }
 
 const SUGGESTIONS = [
@@ -76,7 +77,7 @@ function getFollowupChips(msg: Message): { icon: string; text: string }[] {
   return FOLLOWUP_CHIPS['default']
 }
 
-export default function ChatWindow({ messages, isLoading, onSuggestion, onWizardStart, onWizardAnswer }: ChatWindowProps) {
+export default function ChatWindow({ messages, isLoading, onSuggestion, onWizardStart, onWizardAnswer, onMessageFeedback }: ChatWindowProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -163,7 +164,11 @@ export default function ChatWindow({ messages, isLoading, onSuggestion, onWizard
         <div className="space-y-5 max-w-3xl mx-auto">
           {messages.map((msg, idx) => (
             <div key={msg.id}>
-              <MessageBubble message={msg} onWizardAnswer={onWizardAnswer} />
+              <MessageBubble
+                message={msg}
+                onWizardAnswer={onWizardAnswer}
+                onMessageFeedback={(rating) => onMessageFeedback(msg, rating)}
+              />
 
               {/* Follow-up chips — only after last bot message, only when not loading */}
               {!isLoading && idx === lastBotIdx && msg.role === 'bot' && !msg.wizardOptions && (

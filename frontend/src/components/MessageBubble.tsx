@@ -1,22 +1,13 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import FeedbackButtons from './FeedbackButtons'
 import SourcesList from './SourcesList'
 
-export interface WizardOption {
-  icon: string
-  label: string
-  value: string
-}
+// Tipos canónicos definidos en services/types.ts — re-exportados aquí
+// para mantener compatibilidad con imports existentes desde este archivo.
+export type { WizardOption, Message } from '../services/types'
+import type { Message } from '../services/types'
 
-export interface Message {
-  id: string
-  role: 'user' | 'bot'
-  content: string
-  fuentes?: string[]
-  categoria?: string
-  intent?: string
-  wizardOptions?: WizardOption[]
-}
 
 // ── Category badge colours ──────────────────────────────────────────────────
 const CATEGORIA_MAP: Record<string, { label: string; color: string }> = {
@@ -70,9 +61,10 @@ function IntentBadge({ intent }: { intent: string }) {
 interface MessageBubbleProps {
   message: Message
   onWizardAnswer?: (value: string) => void
+  onMessageFeedback?: (rating: 1 | -1) => Promise<void>
 }
 
-export default function MessageBubble({ message, onWizardAnswer }: MessageBubbleProps) {
+export default function MessageBubble({ message, onWizardAnswer, onMessageFeedback }: MessageBubbleProps) {
   const isUser = message.role === 'user'
 
   return (
@@ -172,6 +164,11 @@ export default function MessageBubble({ message, onWizardAnswer }: MessageBubble
           <div className="px-1">
             <SourcesList fuentes={message.fuentes} />
           </div>
+        )}
+
+        {/* Feedback 👍/👎 (bot only, not wizard messages) */}
+        {!isUser && !message.wizardOptions && onMessageFeedback && (
+          <FeedbackButtons onVote={onMessageFeedback} />
         )}
       </div>
     </div>

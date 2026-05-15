@@ -1,17 +1,24 @@
 import logging
+import os
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field, field_validator
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from feedback import store as feedback_store
+from feedback.models import FeedbackResponse, MessageFeedbackRequest, SessionFeedbackRequest
 from rag.pipeline import ask
 from rag.retriever import get_collection
 from rag.router import VALID_CATEGORIES
 from rag.sanitizer import sanitize_query, sanitize_session_id
+
+# Secret para exportar feedback (configurable vía variable de entorno)
+_FEEDBACK_EXPORT_SECRET = os.getenv("FEEDBACK_EXPORT_SECRET", "")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,6 +44,13 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
+    # Inicializar base de datos de feedback (SQLite)
+    try:
+        feedback_store.init_db()
+    except Exception as exc:
+        logger.warning(f"No se pudo inicializar feedback DB: {exc}")
+
+    # Cargar colección vectorial
     try:
         get_collection()
         logger.info("ChromaDB cargado correctamente al iniciar.")
@@ -146,3 +160,78 @@ async def get_categorias():
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "BravoBot API"}
+
+
+# ── Endpoints de Feedback ─────────────────────────────────────────────────────
+
+@app.post("/feedback/message", response_model=FeedbackResponse)
+async def submit_message_feedback(req: MessageFeedbackRequest):
+    """
+    Recibe el voto 👍 (rating=1) o 👎 (rating=-1) de un mensaje individual del bot.
+    """
+    try:
+        feedback_store.save_message_feedback(
+            session_id=req.session_id,
+            message_id=req.message_id,
+            rating=req.rating,
+            query=req.query,
+            respuesta=req.respuesta,
+            categoria=req.categoria,
+            intent=req.intent,
+        )
+        return FeedbackResponse(ok=True, message="Feedback de mensaje registrado.")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Error en /feedback/message: {exc}")
+        raise HTTPException(status_code=500, detail="No se pudo guardar el feedback.")
+
+
+@app.post("/feedback/session", response_model=FeedbackResponse)
+async def submit_session_feedback(req: SessionFeedbackRequest):
+    """
+    Recibe la calificación 1–5 ⭐ de una sesión completa de chat.
+    Se dispara cuando el usuario cierra el chat tras ≥2 respuestas del bot.
+    """
+    try:
+        feedback_store.save_session_feedback(
+            session_id=req.session_id,
+            rating=req.rating,
+            comment=req.comment,
+            n_messages=req.n_messages,
+            n_bot_messages=req.n_bot_messages,
+            categorias=req.categorias,
+        )
+        return FeedbackResponse(ok=True, message="¡Gracias por tu calificación!")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Error en /feedback/session: {exc}")
+        raise HTTPException(status_code=500, detail="No se pudo guardar la calificación.")
+
+
+@app.get("/feedback/export")
+async def export_feedback(
+    secret: str = Query("", description="Clave de exportación"),
+    tabla: str = Query("session", description="'session' o 'message'"),
+):
+    """
+    Exporta los registros de feedback como CSV.
+    Requiere el parámetro ?secret= configurado en FEEDBACK_EXPORT_SECRET.
+    Uso: GET /feedback/export?secret=tu_clave&tabla=session
+    """
+    if not _FEEDBACK_EXPORT_SECRET or secret != _FEEDBACK_EXPORT_SECRET:
+        raise HTTPException(status_code=403, detail="Acceso no autorizado.")
+
+    if tabla == "message":
+        csv_content = feedback_store.export_message_csv()
+        filename = "feedback_mensajes.csv"
+    else:
+        csv_content = feedback_store.export_session_csv()
+        filename = "feedback_sesiones.csv"
+
+    return PlainTextResponse(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

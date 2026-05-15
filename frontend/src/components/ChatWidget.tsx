@@ -1,8 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import ChatWindow from './ChatWindow'
 import InputBar from './InputBar'
+import RatingModal from './RatingModal'
 import { Message } from './MessageBubble'
-import { sendMessage as apiSendMessage } from '../services/api'
+import {
+  sendMessage as apiSendMessage,
+  submitMessageFeedback,
+  submitSessionFeedback,
+} from '../services/api'
 import type { ApiError } from '../services/api'
 import { useHealthCheck } from '../hooks/useHealthCheck'
 import { useWizard, WIZARD_STEPS, buildWizardQuery, WIZARD_TRIGGER_PATTERNS } from '../hooks/useWizard'
@@ -92,6 +97,7 @@ export default function ChatWidget() {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [messages, setMessages]     = useState<Message[]>(loadMessages)
   const [isLoading, setIsLoading]   = useState(false)
+  const [showRatingModal, setShowRatingModal] = useState(false)
 
   // session_id persistente en localStorage — sobrevive recargas
   const sessionIdRef = useRef<string>(getOrCreateSessionId())
@@ -224,6 +230,68 @@ export default function ChatWidget() {
     sessionIdRef.current = newId
     localStorage.setItem(SESSION_KEY, newId)
     wizard.resetWizard()
+  }
+
+  /**
+   * Cierre del chat: si hubo ≥2 respuestas del bot, muestra el modal de
+   * calificación antes de cerrar. Si no, cierra directamente.
+   */
+  const handleClose = () => {
+    const nBotMessages = messages.filter((m) => m.role === 'bot').length
+    if (nBotMessages >= 2) {
+      setShowRatingModal(true)
+    } else {
+      setIsOpen(false)
+    }
+  }
+
+  /**
+   * Envía el feedback 👍/👎 de un mensaje individual.
+   * Adjunta el contexto del mensaje (query anterior del usuario, respuesta, categoría).
+   */
+  const handleMessageFeedback = async (msg: Message, rating: 1 | -1): Promise<void> => {
+    // Buscar la query del usuario justo antes de este mensaje del bot
+    const msgIndex = messages.findIndex((m) => m.id === msg.id)
+    const precedingUser = messages
+      .slice(0, msgIndex)
+      .reverse()
+      .find((m) => m.role === 'user')
+
+    await submitMessageFeedback({
+      session_id:  sessionIdRef.current,
+      message_id:  msg.id,
+      rating,
+      query:       precedingUser?.content,
+      respuesta:   msg.content,
+      categoria:   msg.categoria,
+      intent:      msg.intent,
+    })
+  }
+
+  /**
+   * Envía la calificación 1–5 ⭐ de la sesión completa y cierra el chat.
+   */
+  const handleSessionRating = async (rating: number, comment: string): Promise<void> => {
+    const botMessages  = messages.filter((m) => m.role === 'bot')
+    const categorias   = [...new Set(
+      botMessages.map((m) => m.categoria).filter((c): c is string => !!c)
+    )]
+
+    await submitSessionFeedback({
+      session_id:     sessionIdRef.current,
+      rating,
+      comment:        comment || undefined,
+      n_messages:     messages.length,
+      n_bot_messages: botMessages.length,
+      categorias,
+    })
+    // El modal se cierra solo desde RatingModal (setTimeout) → onSkip → setShowRatingModal(false) → setIsOpen(false)
+  }
+
+  /** Cierra el modal (ya sea tras enviar o al saltar) y cierra el chat. */
+  const handleModalClose = () => {
+    setShowRatingModal(false)
+    setIsOpen(false)
   }
 
   // ── Indicador de estado del backend ────────────────────────────────────────
@@ -380,7 +448,7 @@ export default function ChatWidget() {
 
           {/* Close button */}
           <button
-            onClick={() => setIsOpen(false)}
+            onClick={handleClose}
             style={{
               background: 'rgba(255,255,255,0.1)',
               border: 'none',
@@ -426,10 +494,19 @@ export default function ChatWidget() {
             onSuggestion={handleSuggestion}
             onWizardStart={handleWizardStart}
             onWizardAnswer={handleWizardAnswer}
+            onMessageFeedback={handleMessageFeedback}
           />
           <InputBar onSend={sendMessage} disabled={isLoading || backendStatus === 'offline'} />
         </div>
       </div>
+
+      {/* ═══════════════ RATING MODAL ═══════════════ */}
+      {showRatingModal && (
+        <RatingModal
+          onSubmit={handleSessionRating}
+          onSkip={handleModalClose}
+        />
+      )}
 
       {/* ═══════════════ FLOATING BUTTON ═══════════════ */}
       <button

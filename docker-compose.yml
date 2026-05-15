@@ -25,6 +25,7 @@ services:
       CHROMA_PERSIST_DIR: /app/chroma_db
     volumes:
       - chroma_data:/app/chroma_db
+      - feedback_data:/app/feedback   # Persiste feedback.db entre reinicios
     networks:
       - bravobot-net
     # No expone puerto al host — solo accesible desde nginx en la red interna
@@ -79,3 +80,5 @@ networks:
 volumes:
   chroma_data:
     name: bravobot-chroma-data
+  feedback_data:
+    name: bravobot-feedback-data
