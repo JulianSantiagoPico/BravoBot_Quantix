@@ -5,10 +5,11 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from logger import get_logger
 
 from .pdf_extractor import extract_pdf, is_pdf_allowed
 
-logger = logging.getLogger(__name__)
+logger = get_logger("bravobot.scraper.static")
 
 HEADERS = {
     "User-Agent": (
@@ -30,20 +31,34 @@ PDF_SELECTORS = [
 NOISE_TAGS = ["script", "style", "nav", "footer", "header", "noscript", "aside", "form"]
 
 NOISE_DIV_CLASSES = {
-    "site-header", "site-footer", "site-navigation", "main-navigation",
-    "top-bar", "topbar", "header-top", "top-header",
-    "breadcrumbs", "breadcrumb",
-    "social-share", "social-links",
-    "cookie-notice", "cookie-banner", "cookie-consent",
-    "offcanvas", "offcanvas-menu",
-    "modal-overlay", "modal-backdrop",
+    "site-header",
+    "site-footer",
+    "site-navigation",
+    "main-navigation",
+    "top-bar",
+    "topbar",
+    "header-top",
+    "top-header",
+    "breadcrumbs",
+    "breadcrumb",
+    "social-share",
+    "social-links",
+    "cookie-notice",
+    "cookie-banner",
+    "cookie-consent",
+    "offcanvas",
+    "offcanvas-menu",
+    "modal-overlay",
+    "modal-backdrop",
 }
+
 
 def _remove_noise(soup: BeautifulSoup) -> None:
     for tag in soup(NOISE_TAGS):
         tag.decompose()
     to_remove = [
-        el for el in soup.find_all(True)
+        el
+        for el in soup.find_all(True)
         if set(c.lower() for c in (el.get("class") or [])) & NOISE_DIV_CLASSES
     ]
     for el in to_remove:
@@ -118,7 +133,9 @@ def scrape_static(
 
         if follow_programs:
             discovered = _discover_program_urls(soup, url)
-            logger.info(f"[static] {len(discovered)} URLs de programa descubiertas en {url}")
+            logger.info(
+                f"[static] {len(discovered)} URLs de programa descubiertas en {url}"
+            )
 
         _remove_noise(soup)
 

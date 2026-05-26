@@ -1,20 +1,18 @@
 import logging
 import os
-import re
-import uuid
 from pathlib import Path
-from urllib.parse import urlparse
 
 import chromadb
 from dotenv import load_dotenv
+from logger import get_logger
 from sentence_transformers import SentenceTransformer
 
-from .cleaner import clean_text
 from .chunker import chunk_text
+from .cleaner import clean_text
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = get_logger("bravobot.ingestion.embedder")
 
 _DEFAULT_CHROMA = str(Path(__file__).resolve().parent.parent / "chroma_db")
 CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", _DEFAULT_CHROMA)
@@ -119,7 +117,9 @@ def build_index(raw_pages: list[dict], reset: bool = False) -> None:
             continue
 
         titulo = _extract_titulo(texto_limpio)
-        program_name = _extract_program_name(url, texto_limpio) if categoria == "programas" else ""
+        program_name = (
+            _extract_program_name(url, texto_limpio) if categoria == "programas" else ""
+        )
         level = _extract_level(url, categoria)
         source_type = _extract_source_type(categoria, tipo)
         program_slug = _extract_program_slug(url, categoria)
@@ -127,7 +127,9 @@ def build_index(raw_pages: list[dict], reset: bool = False) -> None:
         logger.info(f"Indexando {len(chunks)} chunks de: {url}")
 
         try:
-            embeddings = model.encode(chunks, show_progress_bar=False, batch_size=32).tolist()
+            embeddings = model.encode(
+                chunks, show_progress_bar=False, batch_size=32
+            ).tolist()
         except Exception as exc:
             logger.error(f"Error generando embeddings para {url}: {exc}")
             continue

@@ -17,12 +17,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%H:%M:%S",
-)
-logger = logging.getLogger("run_ingestion")
+# Usar configuración centralizada de logging del backend
+sys.path.insert(0, str(Path(__file__).parent / "backend"))
+from logger import get_logger, setup_logging
+
+setup_logging()
+logger = get_logger("run_ingestion")
 
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "backend" / "data"
@@ -34,9 +34,9 @@ load_dotenv(BASE_DIR / "backend" / ".env")
 
 sys.path.insert(0, str(BASE_DIR / "backend"))
 
-from scraper.urls import URLS  # noqa: E402
-from scraper.static_scraper import scrape_static  # noqa: E402
 from scraper.dynamic_scraper import scrape_dynamic  # noqa: E402
+from scraper.static_scraper import scrape_static  # noqa: E402
+from scraper.urls import URLS  # noqa: E402
 
 
 async def run_scraping() -> list[dict]:
@@ -56,7 +56,9 @@ async def run_scraping() -> list[dict]:
         visited.add(url)
 
         if scraper_type == "static":
-            docs, discovered = scrape_static(url, categoria, follow_programs=follow_programs)
+            docs, discovered = scrape_static(
+                url, categoria, follow_programs=follow_programs
+            )
             logger.info(f"  → {len(docs)} documento(s) obtenidos de {url}")
             for doc in docs:
                 visited.add(doc["url"])
@@ -98,7 +100,9 @@ async def run_scraping() -> list[dict]:
             unique_docs.append(doc)
 
     if len(unique_docs) < len(all_docs):
-        logger.info(f"Deduplicación: {len(all_docs)} → {len(unique_docs)} documentos únicos")
+        logger.info(
+            f"Deduplicación: {len(all_docs)} → {len(unique_docs)} documentos únicos"
+        )
 
     logger.info(f"\nTotal documentos scrapeados: {len(unique_docs)}")
     return unique_docs
@@ -114,15 +118,20 @@ def load_manual_docs() -> list[dict]:
     try:
         raw = json.loads(MANUAL_DOCS_PATH.read_text(encoding="utf-8"))
         valid = [
-            doc for doc in raw
+            doc
+            for doc in raw
             if isinstance(doc.get("texto"), str)
             and not doc["texto"].strip().startswith("TODO:")
             and doc["texto"].strip()
         ]
         if valid:
-            logger.info(f"manual_docs.json: {len(valid)} documento(s) curado(s) cargado(s).")
+            logger.info(
+                f"manual_docs.json: {len(valid)} documento(s) curado(s) cargado(s)."
+            )
         else:
-            logger.info("manual_docs.json: sin documentos válidos (todos son placeholders).")
+            logger.info(
+                "manual_docs.json: sin documentos válidos (todos son placeholders)."
+            )
         return valid
     except Exception as exc:
         logger.warning(f"No se pudo leer manual_docs.json: {exc}")
@@ -138,21 +147,32 @@ def save_raw(docs: list[dict]) -> None:
 
 def load_raw() -> list[dict]:
     if not RAW_PAGES_PATH.exists():
-        logger.error(f"No se encontró {RAW_PAGES_PATH}. Ejecuta primero sin --index-only.")
+        logger.error(
+            f"No se encontró {RAW_PAGES_PATH}. Ejecuta primero sin --index-only."
+        )
         sys.exit(1)
     return json.loads(RAW_PAGES_PATH.read_text(encoding="utf-8"))
 
 
 def run_indexing(docs: list[dict], reset: bool) -> None:
     from ingestion.embedder import build_index
+
     build_index(docs, reset=reset)
 
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="BravoBot ingestion pipeline")
-    parser.add_argument("--reset", action="store_true", help="Borrar ChromaDB antes de indexar")
-    parser.add_argument("--scrape-only", action="store_true", help="Solo scraping, sin indexar")
-    parser.add_argument("--index-only", action="store_true", help="Solo indexar raw_pages.json existente")
+    parser.add_argument(
+        "--reset", action="store_true", help="Borrar ChromaDB antes de indexar"
+    )
+    parser.add_argument(
+        "--scrape-only", action="store_true", help="Solo scraping, sin indexar"
+    )
+    parser.add_argument(
+        "--index-only",
+        action="store_true",
+        help="Solo indexar raw_pages.json existente",
+    )
     args = parser.parse_args()
 
     if args.scrape_only and args.index_only:

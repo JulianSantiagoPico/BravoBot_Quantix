@@ -1,17 +1,30 @@
 import logging
 import os
 import sys
+import time
+import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field, field_validator
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from feedback import store as feedback_store
-from feedback.models import FeedbackResponse, MessageFeedbackRequest, SessionFeedbackRequest
+from feedback.models import (
+    FeedbackResponse,
+    MessageFeedbackRequest,
+    SessionFeedbackRequest,
+)
+from logger import (
+    get_logger,
+    set_request_id,
+    set_session_id,
+    setup_logging,
+    time_logged,
+)
 from rag.pipeline import ask
 from rag.retriever import get_collection
 from rag.router import VALID_CATEGORIES
@@ -20,12 +33,9 @@ from rag.sanitizer import sanitize_query, sanitize_session_id
 # Secret para exportar feedback (configurable vía variable de entorno)
 _FEEDBACK_EXPORT_SECRET = os.getenv("FEEDBACK_EXPORT_SECRET", "")
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%H:%M:%S",
-)
-logger = logging.getLogger("bravobot.api")
+# Inicializar logging centralizado
+setup_logging()
+logger = get_logger("bravobot.api")
 
 app = FastAPI(
     title="BravoBot API",
@@ -42,6 +52,34 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """
+    Middleware que asigna un request_id único a cada petición entrante
+    y loggea método, ruta, status y duración.
+    """
+    req_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:12])
+    set_request_id(req_id)
+
+    # Si la request tiene session_id en query param o body, lo extraemos
+    # (para POST se lee después en el endpoint, aquí solo ponemos el request_id)
+
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed = time.perf_counter() - start
+
+    # Para rutas con session_id ya seteado, se reflejará; si no, queda "-"
+    logger.info(
+        "[HTTP] %s %s → %d (%.0fms)%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed * 1000,
+        f" qs={request.url.query}" if request.url.query else "",
+    )
+    return response
+
+
 @app.on_event("startup")
 async def startup_event():
     # Inicializar base de datos de feedback (SQLite)
@@ -53,7 +91,7 @@ async def startup_event():
     # Cargar colección vectorial
     try:
         get_collection()
-        logger.info("ChromaDB cargado correctamente al iniciar.")
+        logger.debug("ChromaDB cargado correctamente al iniciar.")
     except Exception as exc:
         logger.warning(
             f"No se pudo cargar ChromaDB al iniciar: {exc}. "
@@ -62,8 +100,15 @@ async def startup_event():
 
 
 class ChatRequest(BaseModel):
-    query: str = Field(..., min_length=1, max_length=500, description="Pregunta del aspirante (máx 500 caracteres)")
-    session_id: str | None = Field(None, max_length=64, description="ID de sesión alfanumérico (máx 64 caracteres)")
+    query: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Pregunta del aspirante (máx 500 caracteres)",
+    )
+    session_id: str | None = Field(
+        None, max_length=64, description="ID de sesión alfanumérico (máx 64 caracteres)"
+    )
 
     @field_validator("query")
     @classmethod
@@ -78,8 +123,11 @@ class ChatRequest(BaseModel):
         if v is None:
             return None
         import re
+
         if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", v):
-            raise ValueError("session_id inválido. Solo alfanuméricos, guiones y guiones bajos (máx 64 chars).")
+            raise ValueError(
+                "session_id inválido. Solo alfanuméricos, guiones y guiones bajos (máx 64 chars)."
+            )
         return v
 
 
@@ -95,8 +143,8 @@ class ChatResponse(BaseModel):
 # Almacenamiento en memoria para el historial de conversaciones
 # Formato: { "session_id": [{"role": "user", "text": "..." }, {"role": "model", "text": "..."}] }
 sessions: dict[str, list[dict]] = {}
-MAX_HISTORY_LENGTH = 10   # Máximo de mensajes por sesión
-MAX_SESSIONS = 1000       # Máximo de sesiones activas en memoria
+MAX_HISTORY_LENGTH = 10  # Máximo de mensajes por sesión
+MAX_SESSIONS = 1000  # Máximo de sesiones activas en memoria
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -111,31 +159,63 @@ async def chat(request: ChatRequest):
     try:
         history = []
 
+        # Propagar session_id al contexto de logging
+        set_session_id(clean_session_id)
+
         if clean_session_id:
             # Protección contra memory flooding: limitar sesiones activas
             if clean_session_id not in sessions and len(sessions) >= MAX_SESSIONS:
                 logger.warning(
-                    f"[SECURITY] Límite de sesiones activas ({MAX_SESSIONS}) alcanzado. "
-                    "Rechazando nueva sesión."
+                    "[SECURITY] Límite de sesiones activas (%d) alcanzado. "
+                    "Rechazando nueva sesión (último session_id=%s).",
+                    MAX_SESSIONS,
+                    list(sessions.keys())[-1][:12] if sessions else "?",
                 )
                 raise HTTPException(
                     status_code=429,
                     detail="Demasiadas sesiones activas. Inténtalo más tarde.",
                 )
             if clean_session_id not in sessions:
+                logger.info(
+                    "[SESSION] Nueva sesión creada (total activas: %d)",
+                    len(sessions) + 1,
+                )
                 sessions[clean_session_id] = []
             history = sessions[clean_session_id]
 
-        # Llamada al pipeline RAG con historial
-        result = ask(clean_query, history=history)
+        logger.info(
+            "[CHAT] Query: %.100s | history_turns=%d",
+            clean_query,
+            len(history) // 2,
+        )
 
-        # Actualizar historial
+        # Llamada al pipeline RAG con historial
+        with time_logged("pipeline_completo", logger, level=logging.INFO):
+            result = ask(clean_query, history=history)
+
+        # Actualizar historial con rotación FIFO
         if clean_session_id:
             sessions[clean_session_id].append({"role": "user", "text": clean_query})
-            sessions[clean_session_id].append({"role": "model", "text": result["respuesta"]})
+            sessions[clean_session_id].append(
+                {"role": "model", "text": result["respuesta"]}
+            )
             # Mantener solo los últimos N mensajes
             if len(sessions[clean_session_id]) > MAX_HISTORY_LENGTH:
-                sessions[clean_session_id] = sessions[clean_session_id][-MAX_HISTORY_LENGTH:]
+                sessions[clean_session_id] = sessions[clean_session_id][
+                    -MAX_HISTORY_LENGTH:
+                ]
+                logger.debug(
+                    "[SESSION] Historial rotado a últimos %d mensajes",
+                    MAX_HISTORY_LENGTH,
+                )
+
+        logger.info(
+            "[CHAT] → intent=%s categorias=%s fuentes=%d respuesta_len=%d",
+            result.get("intent", "?"),
+            result.get("categorias", []),
+            len(result.get("fuentes", [])),
+            len(result.get("respuesta", "")),
+        )
 
         return ChatResponse(
             respuesta=result["respuesta"],
@@ -147,8 +227,8 @@ async def chat(request: ChatRequest):
         )
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.error(f"Error en /chat: {exc}")
+    except Exception:
+        logger.exception("Error en /chat")
         raise HTTPException(status_code=500, detail="Error interno del servidor.")
 
 
@@ -163,6 +243,7 @@ async def health():
 
 
 # ── Endpoints de Feedback ─────────────────────────────────────────────────────
+
 
 @app.post("/feedback/message", response_model=FeedbackResponse)
 async def submit_message_feedback(req: MessageFeedbackRequest):
@@ -182,8 +263,8 @@ async def submit_message_feedback(req: MessageFeedbackRequest):
         return FeedbackResponse(ok=True, message="Feedback de mensaje registrado.")
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.error(f"Error en /feedback/message: {exc}")
+    except Exception:
+        logger.exception("Error en /feedback/message")
         raise HTTPException(status_code=500, detail="No se pudo guardar el feedback.")
 
 
@@ -205,9 +286,11 @@ async def submit_session_feedback(req: SessionFeedbackRequest):
         return FeedbackResponse(ok=True, message="¡Gracias por tu calificación!")
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.error(f"Error en /feedback/session: {exc}")
-        raise HTTPException(status_code=500, detail="No se pudo guardar la calificación.")
+    except Exception:
+        logger.exception("Error en /feedback/session")
+        raise HTTPException(
+            status_code=500, detail="No se pudo guardar la calificación."
+        )
 
 
 @app.get("/feedback/export")

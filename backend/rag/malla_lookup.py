@@ -4,7 +4,9 @@ import logging
 import unicodedata
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from logger import get_logger
+
+logger = get_logger("bravobot.malla")
 
 _DATA_PATH = Path(__file__).parent.parent / "data" / "mallas_curriculares.json"
 
@@ -27,7 +29,7 @@ def _load() -> None:
         data = json.loads(_DATA_PATH.read_text(encoding="utf-8"))
         _programs = data.get("programs", [])
         _normalized_names = [_normalize(p["name"]) for p in _programs]
-        logger.info(f"[malla_lookup] {len(_programs)} programas cargados.")
+        logger.debug(f"[malla_lookup] {len(_programs)} programas cargados.")
     except Exception as exc:
         logger.error(f"[malla_lookup] Error cargando mallas: {exc}")
 

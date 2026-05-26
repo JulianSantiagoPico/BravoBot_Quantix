@@ -3,12 +3,13 @@ import re
 from datetime import datetime
 from urllib.parse import urljoin, urlparse
 
+from logger import get_logger
 from playwright.async_api import async_playwright
 
 from .pdf_extractor import extract_pdf, is_pdf_allowed
 from .urls import PROGRAM_URL_PATTERNS
 
-logger = logging.getLogger(__name__)
+logger = get_logger("bravobot.scraper.dynamic")
 
 CALENDAR_PATTERN = re.compile(r"(\d{4})[^\d]*(1|2)", re.IGNORECASE)
 
@@ -104,7 +105,9 @@ async def scrape_program(page, url: str, categoria: str) -> list[dict]:
     return docs
 
 
-async def _scrape_faculty_index(page, url: str, categoria: str, visited: set) -> list[dict]:
+async def _scrape_faculty_index(
+    page, url: str, categoria: str, visited: set
+) -> list[dict]:
     docs = []
     try:
         logger.info(f"[dynamic/faculty] Indexando: {url}")
@@ -127,7 +130,9 @@ async def _scrape_faculty_index(page, url: str, categoria: str, visited: set) ->
                 visited.add(full)
 
         child_urls = list(dict.fromkeys(child_urls))
-        logger.info(f"[dynamic/faculty] {len(child_urls)} programas descubiertos en {url}")
+        logger.info(
+            f"[dynamic/faculty] {len(child_urls)} programas descubiertos en {url}"
+        )
 
         for child_url in child_urls:
             child_docs = await scrape_program(page, child_url, categoria)
@@ -143,9 +148,10 @@ async def _scrape_calendar(page, url: str, categoria: str) -> list[dict]:
     docs = []
     try:
         logger.info(f"[dynamic/calendar] Descubriendo calendarios en: {url}")
+        from urllib.parse import urljoin as _urljoin
+
         import requests as _requests
         from bs4 import BeautifulSoup as _BS
-        from urllib.parse import urljoin as _urljoin
 
         resp = _requests.get(
             url,
@@ -168,16 +174,24 @@ async def _scrape_calendar(page, url: str, categoria: str) -> list[dict]:
                 t = (int(m.group(1)), int(m.group(2)))
                 if t > best_tuple:
                     best_tuple = t
-                    best = {"href": href, "label": f"Calendario {m.group(1)}-{m.group(2)}"}
+                    best = {
+                        "href": href,
+                        "label": f"Calendario {m.group(1)}-{m.group(2)}",
+                    }
 
         if not best:
-            logger.warning(f"[dynamic/calendar] No se encontró ningún calendario en {url}")
+            logger.warning(
+                f"[dynamic/calendar] No se encontró ningún calendario en {url}"
+            )
             return docs
 
-        logger.info(f"[dynamic/calendar] Semestre más reciente: {best['label']} → {best['href']}")
+        logger.info(
+            f"[dynamic/calendar] Semestre más reciente: {best['label']} → {best['href']}"
+        )
 
         if best["href"].lower().endswith(".pdf"):
             from .pdf_extractor import extract_pdf
+
             doc = extract_pdf(best["href"], categoria)
             if doc:
                 docs.append(doc)

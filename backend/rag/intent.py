@@ -12,10 +12,12 @@ Intenciones posibles:
   informational   → consulta informativa estándar (comportamiento por defecto)
 """
 
-import re
 import logging
+import re
 
-logger = logging.getLogger(__name__)
+from logger import get_logger
+
+logger = get_logger("bravobot.intent")
 
 # ── Patrones por intención ────────────────────────────────────────────────────
 
@@ -29,13 +31,23 @@ _CONVERSATIONAL_PATTERNS: list[re.Pattern] = [
     re.compile(r"\bsimplifica\b", re.I),
     re.compile(r"\bampl[ií]a\b|\bamplia\b", re.I),
     re.compile(r"\breformula\b", re.I),
-    re.compile(r"\bexplica\w*\s+(de\s+nuevo|otra\s+vez|m[aá]s\s+(simple|sencillo|claro|f[aá]cil))\b", re.I),
-    re.compile(r"\bhazlo\s+(m[aá]s\s+)?(corto|breve|simple|sencillo|detallado|largo|claro)\b", re.I),
+    re.compile(
+        r"\bexplica\w*\s+(de\s+nuevo|otra\s+vez|m[aá]s\s+(simple|sencillo|claro|f[aá]cil))\b",
+        re.I,
+    ),
+    re.compile(
+        r"\bhazlo\s+(m[aá]s\s+)?(corto|breve|simple|sencillo|detallado|largo|claro)\b",
+        re.I,
+    ),
     re.compile(r"\bes\s+muy\s+largo\b|\bm[aá]s\s+corto\b|\bm[aá]s\s+breve\b", re.I),
     re.compile(r"\ben\s+pocas\s+palabras\b|\ben\s+resumen\b", re.I),
     re.compile(r"\bpuedes\s+(resumir|simplificar|ampliar|explicar\s+m[aá]s)\b", re.I),
-    re.compile(r"\bm[aá]s\s+simple\b|\bm[aá]s\s+sencillo\b|\bm[aá]s\s+detallado\b", re.I),
-    re.compile(r"\blo\s+anterior\s+(de\s+forma\s+)?(m[aá]s\s+)?(simple|breve|corta?)\b", re.I),
+    re.compile(
+        r"\bm[aá]s\s+simple\b|\bm[aá]s\s+sencillo\b|\bm[aá]s\s+detallado\b", re.I
+    ),
+    re.compile(
+        r"\blo\s+anterior\s+(de\s+forma\s+)?(m[aá]s\s+)?(simple|breve|corta?)\b", re.I
+    ),
     re.compile(r"\brepite\b|\brepetir\b", re.I),
     re.compile(r"\bdi(me)?\s+lo\s+mismo\s+pero\b", re.I),
 ]
@@ -46,7 +58,9 @@ _COMPARISON_PATTERNS: list[re.Pattern] = [
     re.compile(r"\bdiferencia\s+(hay|existe)\b", re.I),
     re.compile(r"\bvs\.?\b|\bversus\b", re.I),
     re.compile(r"\bmejor\s+entre\b", re.I),
-    re.compile(r"\bcu[aá]l\s+(es\s+)?(mejor|m[aá]s\s+\w+)\s+(entre|de\s+(los|las))\b", re.I),
+    re.compile(
+        r"\bcu[aá]l\s+(es\s+)?(mejor|m[aá]s\s+\w+)\s+(entre|de\s+(los|las))\b", re.I
+    ),
     re.compile(r"\bqu[eé]\s+diferencia\s+(hay|tiene|tienen)\b", re.I),
     re.compile(r"\buno\s+vs\.?\s+otro\b|\buno\s+versus\s+otro\b", re.I),
     re.compile(r"\bcu[aá]l\s+tiene\s+m[aá]s\b", re.I),
@@ -56,12 +70,23 @@ _COMPARISON_PATTERNS: list[re.Pattern] = [
 
 _RECOMMENDATION_PATTERNS: list[re.Pattern] = [
     re.compile(r"\brecomiend[ae]\w*\b|\brecomendaci[oó]n\b", re.I),
-    re.compile(r"\bqu[eé]\s+carrera\s+(me\s+)?(recomiend[ae]|deber[ií]a|conviene|es\s+mejor\s+para)\b", re.I),
-    re.compile(r"\bcu[aá]l\s+(carrera|programa)\s+(elegir[ií]a|escoger[ií]a|me\s+conviene|me\s+sirve)\b", re.I),
-    re.compile(r"\bme\s+gusta[n]?\s+(las?\s+)?\b(matem[aá]ticas|programaci[oó]n|electr[oó]nica|f[ií]sica|biolog[ií]a|arte|dise[nñ]o)\b", re.I),
+    re.compile(
+        r"\bqu[eé]\s+carrera\s+(me\s+)?(recomiend[ae]|deber[ií]a|conviene|es\s+mejor\s+para)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\bcu[aá]l\s+(carrera|programa)\s+(elegir[ií]a|escoger[ií]a|me\s+conviene|me\s+sirve)\b",
+        re.I,
+    ),
+    re.compile(
+        r"\bme\s+gusta[n]?\s+(las?\s+)?\b(matem[aá]ticas|programaci[oó]n|electr[oó]nica|f[ií]sica|biolog[ií]a|arte|dise[nñ]o)\b",
+        re.I,
+    ),
     re.compile(r"\bme\s+interes[ae]\b", re.I),
     re.compile(r"\bpara\s+alguien\s+que\b|\bpara\s+alguien\s+a\s+quien\b", re.I),
-    re.compile(r"\bqu[eé]\s+perfil\b|\bqu[eé]\s+programa\s+es\s+para\s+(m[ií]|mi)\b", re.I),
+    re.compile(
+        r"\bqu[eé]\s+perfil\b|\bqu[eé]\s+programa\s+es\s+para\s+(m[ií]|mi)\b", re.I
+    ),
     re.compile(r"\bno\s+s[eé]\s+qu[eé]\s+estudiar\b|\bqu[eé]\s+estudiar\b", re.I),
     re.compile(r"\bsoy\s+(bueno|mala?|regular)\s+en\b", re.I),
     re.compile(r"\btengo\s+habilidad(es)?\s+en\b|\bme\s+destaco\s+en\b", re.I),
@@ -125,28 +150,28 @@ def classify_intent(query: str, history: list[dict] | None = None) -> str:
 
     # 1. Conversacional — tiene prioridad sobre todo lo demás
     if _matches_any(q, _CONVERSATIONAL_PATTERNS):
-        logger.info(f"[intent] conversational — query: {q!r}")
+        logger.debug("[intent] conversational")
         return "conversational"
 
     # 2. Comparación
     if _matches_any(q, _COMPARISON_PATTERNS):
-        logger.info(f"[intent] comparison — query: {q!r}")
+        logger.debug("[intent] comparison")
         return "comparison"
 
     # 3. Recomendación
     if _matches_any(q, _RECOMMENDATION_PATTERNS):
-        logger.info(f"[intent] recommendation — query: {q!r}")
+        logger.debug("[intent] recommendation")
         return "recommendation"
 
     # 4. Followup — query corta con historial O deícticos presentes
     if has_history:
         if word_count <= _FOLLOWUP_MAX_WORDS:
-            logger.info(f"[intent] followup (short query + history) — query: {q!r}")
+            logger.debug("[intent] followup (short query + history)")
             return "followup"
         if _matches_any(q, _DEICTIC_PATTERNS) or _matches_any(q, _FOLLOWUP_STARTERS):
-            logger.info(f"[intent] followup (deictic/starter) — query: {q!r}")
+            logger.debug("[intent] followup (deictic/starter)")
             return "followup"
 
     # 5. Default
-    logger.info(f"[intent] informational — query: {q!r}")
+    logger.debug("[intent] informational")
     return "informational"

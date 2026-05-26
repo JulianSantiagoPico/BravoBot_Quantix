@@ -9,7 +9,9 @@ import logging
 import re
 import unicodedata
 
-logger = logging.getLogger(__name__)
+from logger import get_logger
+
+logger = get_logger("bravobot.sanitizer")
 
 # Longitud máxima permitida (en caracteres) para una query de usuario
 MAX_QUERY_LENGTH = 500
@@ -24,7 +26,10 @@ _INJECTION_PATTERNS: list[re.Pattern] = [
     re.compile(r"you\s+are\s+now\s+a", re.I),
     re.compile(r"act\s+as\s+(if\s+you\s+are|a)\s+", re.I),
     # Instrucciones de override en español
-    re.compile(r"ignora\s+(todo|todas|todas\s+las)?\s*(instrucciones?|reglas?|lo\s+anterior)", re.I),
+    re.compile(
+        r"ignora\s+(todo|todas|todas\s+las)?\s*(instrucciones?|reglas?|lo\s+anterior)",
+        re.I,
+    ),
     re.compile(r"olvida\s+(todo|todas|las\s+instrucciones?|lo\s+anterior)", re.I),
     re.compile(r"nueva\s+instrucci[oó]n", re.I),
     re.compile(r"ahora\s+eres\s+", re.I),
@@ -46,9 +51,7 @@ _INJECTION_PATTERNS: list[re.Pattern] = [
 ]
 
 # Caracteres de control que deben eliminarse (excepto \n y \t que son legítimos)
-_CONTROL_CHARS_RE = re.compile(
-    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\x80-\x9f]"
-)
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\x80-\x9f]")
 
 
 def _normalize(text: str) -> str:
@@ -86,6 +89,10 @@ def sanitize_query(raw: str) -> str:
         str: query limpia y segura.
     Raises:
         ValueError: si la query queda vacía tras sanitizar.
+
+    NOTA: La entrada del usuario NO DEBE aparecer en logs sin truncar.
+    Esta función solo loguea alertas de seguridad y truncamientos,
+    no el contenido completo de la query.
     """
     if not isinstance(raw, str):
         raise ValueError("La query debe ser un string.")

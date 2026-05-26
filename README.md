@@ -171,6 +171,21 @@ python run_ingestion.py --index-only
 python run_ingestion.py --index-only --reset
 ```
 
+### Uso de la ingesta con Docker Compose
+
+El backend en Docker usa el volumen `bravobot-chroma-data`. Para crear o regenerar la colección `bravobot` dentro de ese volumen:
+
+```bash
+docker compose --profile tools run --rm ingestion python run_ingestion.py --reset
+```
+
+Después reinicia el stack para que el backend recargue la colección:
+
+```bash
+docker compose down
+docker compose up --build --force-recreate
+```
+
 > **Nota:** El scraping completo puede tomar varios minutos por el uso de Playwright.
 
 ---
@@ -211,9 +226,10 @@ El proyecto incluye un módulo completo de feedback de los usuarios, diseñado p
    - Permite dar una calificación de 1 a 5 estrellas y dejar un comentario opcional.
    - Registra estadísticas de la sesión (número total de mensajes, cantidad de intervenciones del bot, y categorías cubiertas).
 
-**Almacenamiento (Backend):**
+**Almacenamiento y uso (Backend):**
 - Utiliza **SQLite** como base de datos de persistencia local (`feedback.db`).
 - Los datos se guardan en el contenedor bajo un volumen montado (`feedback_data`), asegurando que la información sobreviva a los reinicios de Docker.
+- El pipeline recupera feedback de mensajes similares por categoría/intención y lo inyecta al generador como señal interna para mejorar claridad, formato, cobertura y tono. El feedback **no se usa como fuente oficial** ni reemplaza el contexto RAG.
 - Se puede exportar la información en formato **CSV** de forma segura mediante un endpoint protegido por un token secreto (`FEEDBACK_EXPORT_SECRET`).
 
 ---

@@ -10,7 +10,6 @@
 # ═══════════════════════════════════════════════════════════════════
 
 services:
-
   # ── Backend FastAPI ───────────────────────────────────────────────
   backend:
     build:
@@ -19,24 +18,47 @@ services:
     container_name: bravobot-backend
     restart: unless-stopped
     env_file:
-      - ./backend/.env          # GEMINI_API_KEY, CHROMA_PERSIST_DIR, etc.
+      - ./backend/.env # GEMINI_API_KEY, CHROMA_PERSIST_DIR, etc.
     environment:
       # Sobreescribe la ruta de ChromaDB para que apunte al volumen Docker
       CHROMA_PERSIST_DIR: /app/chroma_db
+      # Persiste la base SQLite sin ocultar el paquete Python /app/feedback
+      FEEDBACK_DB_PATH: /app/feedback_data/feedback.db
     volumes:
       - chroma_data:/app/chroma_db
-      - feedback_data:/app/feedback   # Persiste feedback.db entre reinicios
+      - feedback_data:/app/feedback_data
     networks:
       - bravobot-net
     # No expone puerto al host — solo accesible desde nginx en la red interna
     expose:
       - "8000"
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8000/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s   # tiempo extra para cargar ChromaDB y modelos
+      start_period: 40s # tiempo extra para cargar ChromaDB y modelos
+
+  # ── Ingesta ChromaDB (ejecución manual) ───────────────────────────
+  ingestion:
+    profiles:
+      - tools
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.ingestion
+    container_name: bravobot-ingestion
+    env_file:
+      - ./backend/.env
+    environment:
+      CHROMA_PERSIST_DIR: /app/backend/chroma_db
+    volumes:
+      - chroma_data:/app/backend/chroma_db
+    networks:
+      - bravobot-net
 
   # ── Frontend nginx ────────────────────────────────────────────────
   frontend:
@@ -46,7 +68,7 @@ services:
     container_name: bravobot-frontend
     restart: unless-stopped
     ports:
-      - "80:80"             # acceso público
+      - "80:80" # acceso público
     depends_on:
       backend:
         condition: service_healthy

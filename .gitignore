@@ -10,6 +10,9 @@ env/
 backend/data/raw_pages.json
 backend/data/pdfs/
 backend/chroma_db/
+backend/feedback/*.db
+backend/feedback/*.db-wal
+backend/feedback/*.db-shm
 
 # Secrets
 backend/.env

@@ -3,7 +3,9 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 
 from dotenv import load_dotenv
+from feedback.store import get_relevant_message_feedback
 from google import genai
+from logger import get_logger, time_logged, timed
 
 from .generator import generate_conversational_response, generate_response
 from .intent import classify_intent
@@ -14,15 +16,26 @@ from .sanitizer import sanitize_query
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = get_logger("bravobot.pipeline")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 _REWRITE_MODEL = "gemini-3.1-flash-lite-preview"
 
 _MALLA_KEYWORDS = {
-    "malla", "materia", "materias", "asignatura", "asignaturas",
-    "semestre", "semestres", "pensum", "credito", "creditos",
-    "crédito", "créditos", "curso", "cursos",
+    "malla",
+    "materia",
+    "materias",
+    "asignatura",
+    "asignaturas",
+    "semestre",
+    "semestres",
+    "pensum",
+    "credito",
+    "creditos",
+    "crédito",
+    "créditos",
+    "curso",
+    "cursos",
 }
 
 _REWRITE_PROMPT = """Eres un asistente que mejora queries de búsqueda.
@@ -46,35 +59,83 @@ _COMPARISON_TOP_K_MULTIPLIER = 2
 
 # Verbos/frases que indican que el usuario quiere un LISTADO general
 _LISTING_VERBS = {
-    "qué", "que", "cuáles", "cuales", "cuál", "cual",
-    "ofrecen", "tienen", "hay", "existe", "existen", "ofrecen",
-    "disponibles", "disponible", "oferta",
-    "puedo estudiar", "puedo hacer", "puedo cursar",
-    "estudiar", "hacer en", "hacer allí", "hacer alli",
+    "qué",
+    "que",
+    "cuáles",
+    "cuales",
+    "cuál",
+    "cual",
+    "ofrecen",
+    "tienen",
+    "hay",
+    "existe",
+    "existen",
+    "ofrecen",
+    "disponibles",
+    "disponible",
+    "oferta",
+    "puedo estudiar",
+    "puedo hacer",
+    "puedo cursar",
+    "estudiar",
+    "hacer en",
+    "hacer allí",
+    "hacer alli",
 }
 
 # Tipos de programa — cualquiera de estos + un verbo de listado → detección
 _PROGRAM_TYPE_KEYWORDS = {
-    "programa", "programas",
-    "carrera", "carreras",
-    "pregrado", "pregrados",
-    "posgrado", "posgrados",
-    "maestría", "maestria", "maestrías", "maestrias",
-    "especialización", "especializacion", "especializaciones",
-    "doctorado", "doctorados",
-    "técnico", "tecnico", "técnicos", "tecnicos",
-    "tecnológico", "tecnologico", "tecnológicos", "tecnologicos",
-    "tecnología", "tecnologia", "tecnologías", "tecnologias",
-    "ingeniería", "ingenieria", "ingenierías", "ingenierias",
-    "licenciatura", "licenciaturas",
-    "oferta académica", "oferta academica",
+    "programa",
+    "programas",
+    "carrera",
+    "carreras",
+    "pregrado",
+    "pregrados",
+    "posgrado",
+    "posgrados",
+    "maestría",
+    "maestria",
+    "maestrías",
+    "maestrias",
+    "especialización",
+    "especializacion",
+    "especializaciones",
+    "doctorado",
+    "doctorados",
+    "técnico",
+    "tecnico",
+    "técnicos",
+    "tecnicos",
+    "tecnológico",
+    "tecnologico",
+    "tecnológicos",
+    "tecnologicos",
+    "tecnología",
+    "tecnologia",
+    "tecnologías",
+    "tecnologias",
+    "ingeniería",
+    "ingenieria",
+    "ingenierías",
+    "ingenierias",
+    "licenciatura",
+    "licenciaturas",
+    "oferta académica",
+    "oferta academica",
 }
 
 _POSGRADO_TYPE_KEYWORDS = {
-    "posgrado", "posgrados",
-    "maestría", "maestria", "maestrías", "maestrias",
-    "especialización", "especializacion", "especializaciones",
-    "doctorado", "doctorados",
+    "posgrado",
+    "posgrados",
+    "maestría",
+    "maestria",
+    "maestrías",
+    "maestrias",
+    "especialización",
+    "especializacion",
+    "especializaciones",
+    "doctorado",
+    "doctorados",
 }
 
 _PROGRAMS_URLS = {
@@ -119,12 +180,12 @@ def _needs_malla(query: str, categorias: list[str]) -> bool:
 def _build_malla_context(query: str) -> dict | None:
     malla = lookup_malla(query)
     if malla:
-        logger.info(f"malla_lookup: programa encontrado → {malla['name']}")
+        logger.debug(f"malla_lookup: programa encontrado → {malla['name']}")
         return malla
 
     courses = lookup_course(query)
     if courses:
-        logger.info(f"malla_lookup: {len(courses)} materia(s) encontrada(s)")
+        logger.debug(f"malla_lookup: {len(courses)} materia(s) encontrada(s)")
         return {"courses": courses}
 
     logger.debug("malla_lookup: sin resultado para la query")
@@ -139,9 +200,13 @@ def _rewrite_followup(query: str, history: list[dict]) -> str:
     """
     try:
         historial_lines = []
-        for msg in history[-6:]:  # últimos 6 mensajes (3 turnos) para no exceder contexto
+        for msg in history[
+            -6:
+        ]:  # últimos 6 mensajes (3 turnos) para no exceder contexto
             role = "Aspirante" if msg["role"] == "user" else "BravoBot"
-            safe_text = sanitize_query(msg["text"]) if msg["role"] == "user" else msg["text"]
+            safe_text = (
+                sanitize_query(msg["text"]) if msg["role"] == "user" else msg["text"]
+            )
             historial_lines.append(f"{role}: {safe_text}")
         historial_str = "\n".join(historial_lines)
 
@@ -152,27 +217,38 @@ def _rewrite_followup(query: str, history: list[dict]) -> str:
         modelos_fallback = [_REWRITE_MODEL, "gemini-2.5-flash", "gemini-2.5-flash-lite"]
         for model_name in modelos_fallback:
             try:
-                response = client.models.generate_content(model=model_name, contents=prompt)
-                rewritten = response.text.strip()
+                response = client.models.generate_content(
+                    model=model_name, contents=prompt
+                )
+                response_text = response.text or ""
+                rewritten = response_text.strip()
                 if rewritten:
-                    logger.info(f"Followup reescrito: {query!r} → {rewritten!r}")
+                    logger.debug("Followup reescrito correctamente")
                     return rewritten
             except Exception as e:
-                logger.warning(f"_rewrite_followup falló con {model_name}: {e}")
+                logger.debug(f"_rewrite_followup falló con {model_name}: {e}")
     except Exception as exc:
-        logger.warning(f"_rewrite_followup falló críticamente, usando query original: {exc}")
+        logger.warning(
+            f"_rewrite_followup falló críticamente, usando query original: {exc}"
+        )
     return query
 
 
-def ask(query: str, history: list[dict] = None) -> dict:
-    logger.info(f"Query recibida: {query!r}")
-
+def ask(query: str, history: list[dict] | None = None) -> dict:
+    history = history or []
     intent = classify_intent(query, history)
-    logger.info(f"Intención detectada: {intent}")
+    logger.info(
+        "[PIPELINE] intent=%s query=%.80s history_turns=%d",
+        intent,
+        query,
+        len(history) // 2,
+    )
 
     # ── Ruta conversacional: skip RAG, responder desde historial ────────────
     if intent == "conversational":
-        result = generate_conversational_response(query, history=history)
+        logger.debug("[PIPELINE] Ruta conversacional (sin RAG)")
+        with time_logged("generar_conversacional", logger, level=logging.INFO):
+            result = generate_conversational_response(query, history=history)
         return {
             "respuesta": result["respuesta"],
             "fuentes": result["fuentes"],
@@ -182,7 +258,11 @@ def ask(query: str, history: list[dict] = None) -> dict:
         }
 
     # ── Para comparación: aumentar top_k para cubrir ambos programas ───────
-    top_k_override = TOP_K * _COMPARISON_TOP_K_MULTIPLIER if intent == "comparison" else TOP_K
+    top_k_override = (
+        TOP_K * _COMPARISON_TOP_K_MULTIPLIER if intent == "comparison" else TOP_K
+    )
+    if intent == "comparison":
+        logger.debug("[PIPELINE] Intención comparativa → top_k=%d", top_k_override)
 
     # ── Para followup: reescribir la query y clasificar EN PARALELO ─────────
     if intent == "followup" and history:
@@ -191,19 +271,41 @@ def ask(query: str, history: list[dict] = None) -> dict:
             future_categorias = executor.submit(classify_query, query)
             effective_query = future_rewrite.result()
             categorias = future_categorias.result()
-        logger.info(f"Categorías clasificadas (paralelo): {categorias}")
+        logger.debug("[PIPELINE] Followup con reescritura → categorías: %s", categorias)
     else:
         effective_query = query
-        categorias = classify_query(effective_query)
-        logger.info(f"Categorías clasificadas: {categorias}")
+        with time_logged("classify_query", logger, level=logging.DEBUG):
+            categorias = classify_query(effective_query)
+        logger.debug("[PIPELINE] Categorías: %s", categorias)
 
-    chunks = retrieve(effective_query, categorias, top_k=top_k_override)
-    logger.info(f"Chunks recuperados: {len(chunks)} (top_k={top_k_override})")
+    with time_logged("retrieve_chunks", logger, level=logging.INFO):
+        chunks = retrieve(effective_query, categorias, top_k=top_k_override)
+    logger.info(
+        "[PIPELINE] Categorías=%s chunks_recuperados=%d top_k=%d modo=%s",
+        categorias,
+        len(chunks),
+        top_k_override,
+        "direct_listing" if _detect_programs_listing(effective_query) else "rag",
+    )
+
+    with time_logged("feedback_lookup", logger, level=logging.DEBUG):
+        feedback_context = get_relevant_message_feedback(
+            query=effective_query,
+            categorias=categorias,
+            intent=intent,
+        )
+    n_positive = len(feedback_context.get("positive", []))
+    n_negative = len(feedback_context.get("negative", []))
+    logger.debug("[PIPELINE] Feedback: %d👍 %d👎", n_positive, n_negative)
 
     malla_context = None
     if _needs_malla(effective_query, categorias):
-        logger.info("Activando malla_lookup para query de malla/materias")
-        malla_context = _build_malla_context(effective_query)
+        with time_logged("malla_lookup", logger, level=logging.DEBUG):
+            malla_context = _build_malla_context(effective_query)
+        if malla_context:
+            logger.debug("[PIPELINE] Contexto de malla encontrado")
+        else:
+            logger.debug("[PIPELINE] Sin resultado de malla para la query")
 
     listing_type = _detect_programs_listing(effective_query)
     programs_link: str | None = None
@@ -212,17 +314,21 @@ def ask(query: str, history: list[dict] = None) -> dict:
             f"Pregrados: {_PROGRAMS_URLS['pregrados']} | "
             f"Posgrados: {_PROGRAMS_URLS['posgrados']}"
         )
+        logger.debug("[PIPELINE] Listado de programas solicitado: ambos")
     elif listing_type in _PROGRAMS_URLS:
         programs_link = _PROGRAMS_URLS[listing_type]
+        logger.debug("[PIPELINE] Listado de programas solicitado: %s", listing_type)
 
-    result = generate_response(
-        query,
-        chunks,
-        malla_context=malla_context,
-        history=history,
-        intent=intent,
-        programs_link=programs_link,
-    )
+    with time_logged("generate_response", logger, level=logging.INFO):
+        result = generate_response(
+            query,
+            chunks,
+            malla_context=malla_context,
+            history=history,
+            intent=intent,
+            programs_link=programs_link,
+            feedback_context=feedback_context,
+        )
 
     return {
         "respuesta": result["respuesta"],

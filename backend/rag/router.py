@@ -3,12 +3,13 @@ import os
 
 from dotenv import load_dotenv
 from google import genai
+from logger import get_logger, time_logged
 
 from .sanitizer import sanitize_query
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
+logger = get_logger("bravobot.router")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 ROUTER_MODEL = "gemini-3.1-flash-lite-preview"
@@ -55,39 +56,47 @@ Pregunta: <PREGUNTA_ASPIRANTE>{query}</PREGUNTA_ASPIRANTE>"""
 def classify_query(query: str) -> list[str]:
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        
+
         # Estrategia de Fallback: Si uno falla, intenta con el siguiente
         modelos_fallback = [ROUTER_MODEL, "gemini-2.5-flash", "gemini-2.5-flash-lite"]
         safe_query = sanitize_query(query)
         response = None
+        model_used = ""
 
-        for model_name in modelos_fallback:
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=ROUTER_PROMPT.format(query=safe_query),
-                )
-                logger.debug(f"Router usó exitosamente: {model_name}")
-                break # Éxito, salimos del bucle
-            except Exception as e:
-                logger.warning(f"Router falló con {model_name}: {e}")
-                
+        with time_logged("router_llm_call", logger, level=logging.DEBUG):
+            for model_name in modelos_fallback:
+                try:
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=ROUTER_PROMPT.format(query=safe_query),
+                    )
+                    model_used = model_name
+                    logger.debug("[ROUTER] Modelo usado: %s", model_name)
+                    break  # Éxito, salimos del bucle
+                except Exception as e:
+                    logger.debug("[ROUTER] Falló con %s: %s", model_name, e)
+
         if not response:
             raise Exception("Todos los modelos de fallback fallaron en el router")
 
-        raw = response.text.strip().lower()
-        
+        raw = (response.text or "").strip().lower()
+
         categorias = []
         for cat in VALID_CATEGORIES:
             if cat in raw:
                 categorias.append(cat)
-                
+
         if not categorias:
-            logger.warning(f"Categoría(s) desconocida(s) en respuesta '{raw}', usando 'general'")
+            logger.warning(
+                '[ROUTER] Categorias desconocidas en respuesta "%s", usando "general"',
+                raw,
+            )
             return ["general"]
-            
-        logger.info(f"Categorías clasificadas: {categorias}")
+
+        logger.debug(
+            "[ROUTER] Query clasificada: %s (modelo=%s)", categorias, model_used
+        )
         return categorias[:3]
     except Exception as exc:
-        logger.error(f"Error crítico en router: {exc}")
+        logger.error("[ROUTER] Error crítico: %s", exc)
         return ["general"]

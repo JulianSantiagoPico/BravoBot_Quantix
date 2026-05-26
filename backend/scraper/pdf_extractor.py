@@ -6,8 +6,9 @@ from urllib.parse import urlparse
 
 import pdfplumber
 import requests
+from logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("bravobot.scraper.pdf")
 
 PDF_DIR = Path(__file__).parent.parent / "data" / "pdfs"
 PDF_DIR.mkdir(parents=True, exist_ok=True)
@@ -56,7 +57,9 @@ def extract_pdf(pdf_url: str, categoria: str) -> dict | None:
                     texto_paginas.append(texto)
 
         if not texto_paginas:
-            logger.warning(f"PDF sin texto extraíble (posible imagen escaneada): {pdf_url}")
+            logger.warning(
+                f"PDF sin texto extraíble (posible imagen escaneada): {pdf_url}"
+            )
             return None
 
         texto_completo = "\n".join(texto_paginas)

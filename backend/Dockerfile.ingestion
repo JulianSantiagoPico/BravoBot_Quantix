@@ -1,0 +1,25 @@
+# syntax=docker/dockerfile:1
+# Imagen para tareas de ingesta/scraping.
+# Se mantiene separada de la imagen de producción para no instalar Playwright en el backend.
+
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements.txt backend/requirements-ingestion.txt ./
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt -r requirements-ingestion.txt
+
+RUN playwright install --with-deps chromium
+
+COPY backend ./backend
+COPY run_ingestion.py ./run_ingestion.py
+
+CMD ["python", "run_ingestion.py", "--reset"]
