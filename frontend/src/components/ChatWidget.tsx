@@ -1,49 +1,54 @@
-import { useState, useRef, useEffect } from 'react'
-import ChatWindow from './ChatWindow'
-import InputBar from './InputBar'
-import RatingModal from './RatingModal'
-import { Message } from './MessageBubble'
+import { useState, useRef, useEffect } from "react";
+import ChatWindow from "./ChatWindow";
+import InputBar from "./InputBar";
+import RatingModal from "./RatingModal";
+import { Message } from "./MessageBubble";
 import {
   sendMessage as apiSendMessage,
   submitMessageFeedback,
   submitSessionFeedback,
-} from '../services/api'
-import type { ApiError } from '../services/api'
-import { useHealthCheck } from '../hooks/useHealthCheck'
-import { useWizard, WIZARD_STEPS, buildWizardQuery, WIZARD_TRIGGER_PATTERNS } from '../hooks/useWizard'
+} from "../services/api";
+import type { ApiError } from "../services/api";
+import { useHealthCheck } from "../hooks/useHealthCheck";
+import {
+  useWizard,
+  WIZARD_STEPS,
+  buildWizardQuery,
+  WIZARD_TRIGGER_PATTERNS,
+} from "../hooks/useWizard";
 
 // ── Constantes ──────────────────────────────────────────────────────────────
-const SESSION_KEY = 'bravobot_session_id'
-const MESSAGES_KEY = 'bravobot_messages'
+const SESSION_KEY = "bravobot_session_id";
+const MESSAGES_KEY = "bravobot_messages";
 
-let msgCounter = 0
+let msgCounter = 0;
 function nextId() {
-  return `msg-${++msgCounter}`
+  return `msg-${++msgCounter}`;
 }
 
 /** Genera o recupera el session_id persistente en localStorage */
 function getOrCreateSessionId(): string {
-  const stored = localStorage.getItem(SESSION_KEY)
-  if (stored) return stored
-  const newId = crypto.randomUUID().replace(/-/g, '').slice(0, 32)
-  localStorage.setItem(SESSION_KEY, newId)
-  return newId
+  const stored = localStorage.getItem(SESSION_KEY);
+  if (stored) return stored;
+  const newId = crypto.randomUUID().replace(/-/g, "").slice(0, 32);
+  localStorage.setItem(SESSION_KEY, newId);
+  return newId;
 }
 
 /** Carga el historial de mensajes persistido */
 function loadMessages(): Message[] {
   try {
-    const raw = localStorage.getItem(MESSAGES_KEY)
-    return raw ? (JSON.parse(raw) as Message[]) : []
+    const raw = localStorage.getItem(MESSAGES_KEY);
+    return raw ? (JSON.parse(raw) as Message[]) : [];
   } catch {
-    return []
+    return [];
   }
 }
 
 /** Persiste el historial de mensajes */
 function saveMessages(msgs: Message[]) {
   try {
-    localStorage.setItem(MESSAGES_KEY, JSON.stringify(msgs))
+    localStorage.setItem(MESSAGES_KEY, JSON.stringify(msgs));
   } catch {
     // localStorage lleno o bloqueado — ignorar silenciosamente
   }
@@ -52,321 +57,398 @@ function saveMessages(msgs: Message[]) {
 /** Traduce un ApiError a texto amigable para el usuario */
 function errorText(err: ApiError): string {
   switch (err.code) {
-    case 'network':    return 'Sin conexión con el servidor. Verifica que el backend esté activo.'
-    case 'timeout':    return 'El servidor tardó demasiado en responder. Intenta de nuevo.'
-    case 'validation': return 'Tu pregunta no pudo procesarse. Verifica el texto ingresado.'
-    case 'rate_limit': return 'Demasiadas solicitudes activas. Espera un momento e intenta de nuevo.'
-    case 'server':     return err.message
-    default:           return 'Ocurrió un error inesperado. Por favor intenta de nuevo o visita pascualbravo.edu.co.'
+    case "network":
+      return "Sin conexión con el servidor. Verifica que el backend esté activo.";
+    case "timeout":
+      return "El servidor tardó demasiado en responder. Intenta de nuevo.";
+    case "validation":
+      return "Tu pregunta no pudo procesarse. Verifica el texto ingresado.";
+    case "rate_limit":
+      return "Demasiadas solicitudes activas. Espera un momento e intenta de nuevo.";
+    case "server":
+      return err.message;
+    default:
+      return "Ocurrió un error inesperado. Por favor intenta de nuevo o visita pascualbravo.edu.co.";
   }
 }
 
 /* ── Close icon ── */
 function CloseIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+    >
       <path d="M18 6 6 18M6 6l12 12" />
     </svg>
-  )
+  );
 }
 
 function shouldStartWizard(text: string): boolean {
-  return WIZARD_TRIGGER_PATTERNS.some((p) => p.test(text))
+  return WIZARD_TRIGGER_PATTERNS.some((p) => p.test(text));
 }
 
 /* ── Fullscreen icon ── */
 function FullscreenIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+    >
       <path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M8 21H5a2 2 0 0 0-2-2v-3M21 16v3a2 2 0 0 0-2 2h-3" />
     </svg>
-  )
+  );
 }
 
 /* ── Restore icon ── */
 function RestoreIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+    >
       <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />
     </svg>
-  )
+  );
 }
 
 export default function ChatWidget() {
-  const [isOpen, setIsOpen]         = useState(false)
-  const [isFullscreen, setIsFullscreen] = useState(false)
-  const [messages, setMessages]     = useState<Message[]>(loadMessages)
-  const [isLoading, setIsLoading]   = useState(false)
-  const [showRatingModal, setShowRatingModal] = useState(false)
+  const [isOpen, setIsOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [messages, setMessages] = useState<Message[]>(loadMessages);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
 
   // session_id persistente en localStorage — sobrevive recargas
-  const sessionIdRef = useRef<string>(getOrCreateSessionId())
+  const sessionIdRef = useRef<string>(getOrCreateSessionId());
+
+  // Evita mostrar el modal de calificación más de una vez por sesión (a menos que se cree una nueva)
+  const sessionRatedRef = useRef(false);
+  // Qué hacer después de que se cierre el modal: 'close' (cerrar panel) o 'newConversation' (resetear)
+  const postRatingActionRef = useRef<"close" | "newConversation">("close");
 
   // Health check al montar el componente
-  const backendStatus = useHealthCheck()
+  const backendStatus = useHealthCheck();
 
   // Wizard de orientación
-  const wizard = useWizard()
+  const wizard = useWizard();
 
   // Persistir mensajes cada vez que cambian
   useEffect(() => {
-    saveMessages(messages)
-  }, [messages])
+    saveMessages(messages);
+  }, [messages]);
 
   /** Envía la query al backend y añade la respuesta del bot. No añade mensaje de usuario. */
   const sendToBackend = async (query: string) => {
-    setIsLoading(true)
+    setIsLoading(true);
     try {
-      const data = await apiSendMessage(query, sessionIdRef.current)
+      const data = await apiSendMessage(query, sessionIdRef.current);
       if (data.session_id && data.session_id !== sessionIdRef.current) {
-        sessionIdRef.current = data.session_id
-        localStorage.setItem(SESSION_KEY, data.session_id)
+        sessionIdRef.current = data.session_id;
+        localStorage.setItem(SESSION_KEY, data.session_id);
       }
       const botMsg: Message = {
         id: nextId(),
-        role: 'bot',
+        role: "bot",
         content: data.respuesta,
         fuentes: data.fuentes,
         categoria: data.categoria,
         intent: data.intent,
-      }
-      setMessages((prev) => [...prev, botMsg])
+      };
+      setMessages((prev) => [...prev, botMsg]);
     } catch (err) {
       const errorMsg: Message = {
         id: nextId(),
-        role: 'bot',
+        role: "bot",
         content: errorText(err as ApiError),
-      }
-      setMessages((prev) => [...prev, errorMsg])
+      };
+      setMessages((prev) => [...prev, errorMsg]);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   /** Maneja la respuesta del usuario a una pregunta del wizard */
   const handleWizardAnswer = (value: string) => {
-    const userMsg: Message = { id: nextId(), role: 'user', content: value }
-    const { nextStep, nextAnswers } = wizard.answerStep(value)
+    const userMsg: Message = { id: nextId(), role: "user", content: value };
+    const { nextStep, nextAnswers } = wizard.answerStep(value);
 
     if (nextStep === 0) {
       // Todas las preguntas respondidas — construir query y enviar al backend
-      const query = buildWizardQuery(nextAnswers)
-      setMessages((prev) => [...prev, userMsg])
-      sendToBackend(query)
+      const query = buildWizardQuery(nextAnswers);
+      setMessages((prev) => [...prev, userMsg]);
+      sendToBackend(query);
     } else {
       // Mostrar la siguiente pregunta del wizard
-      const nextStepDef = WIZARD_STEPS[nextStep - 1]
+      const nextStepDef = WIZARD_STEPS[nextStep - 1];
       const botMsg: Message = {
         id: nextId(),
-        role: 'bot',
+        role: "bot",
         content: nextStepDef.question,
         wizardOptions: nextStepDef.options,
-        intent: 'wizard',
-      }
-      setMessages((prev) => [...prev, userMsg, botMsg])
+        intent: "wizard",
+      };
+      setMessages((prev) => [...prev, userMsg, botMsg]);
     }
-  }
+  };
 
   /** Inicia el wizard desde el chip de la pantalla de bienvenida */
   const handleWizardStart = () => {
-    if (isLoading) return
-    const firstStep = WIZARD_STEPS[0]
+    if (isLoading) return;
+    const firstStep = WIZARD_STEPS[0];
     const introMsg: Message = {
       id: nextId(),
-      role: 'bot',
+      role: "bot",
       content:
-        '¡Perfecto! Voy a ayudarte a encontrar el programa ideal para ti. ' +
-        'Solo necesito que respondas **4 preguntas rápidas** 🎯\n\n' +
+        "¡Perfecto! Voy a ayudarte a encontrar el programa ideal para ti. " +
+        "Solo necesito que respondas **4 preguntas rápidas** 🎯\n\n" +
         firstStep.question,
       wizardOptions: firstStep.options,
-      intent: 'wizard',
-    }
-    wizard.startWizard()
-    setMessages((prev) => [...prev, introMsg])
-  }
+      intent: "wizard",
+    };
+    wizard.startWizard();
+    setMessages((prev) => [...prev, introMsg]);
+  };
 
   const sendMessage = async (text: string) => {
     // Ruta 1: wizard activo — procesar como respuesta al wizard
     if (wizard.isActive) {
-      handleWizardAnswer(text)
-      return
+      handleWizardAnswer(text);
+      return;
     }
 
     // Ruta 2: frase de orientación detectada — iniciar wizard
     if (shouldStartWizard(text)) {
-      const userMsg: Message = { id: nextId(), role: 'user', content: text }
-      const firstStep = WIZARD_STEPS[0]
+      const userMsg: Message = { id: nextId(), role: "user", content: text };
+      const firstStep = WIZARD_STEPS[0];
       const botMsg: Message = {
         id: nextId(),
-        role: 'bot',
+        role: "bot",
         content:
-          '¡Claro! Voy a ayudarte a encontrar el programa ideal. ' +
-          'Te haré **4 preguntas rápidas** para personalizar mi recomendación 🎯\n\n' +
+          "¡Claro! Voy a ayudarte a encontrar el programa ideal. " +
+          "Te haré **4 preguntas rápidas** para personalizar mi recomendación 🎯\n\n" +
           firstStep.question,
         wizardOptions: firstStep.options,
-        intent: 'wizard',
-      }
-      wizard.startWizard()
-      setMessages((prev) => [...prev, userMsg, botMsg])
-      return
+        intent: "wizard",
+      };
+      wizard.startWizard();
+      setMessages((prev) => [...prev, userMsg, botMsg]);
+      return;
     }
 
     // Ruta 3: consulta normal al pipeline RAG
-    const userMsg: Message = { id: nextId(), role: 'user', content: text }
-    setMessages((prev) => [...prev, userMsg])
-    await sendToBackend(text)
-  }
+    const userMsg: Message = { id: nextId(), role: "user", content: text };
+    setMessages((prev) => [...prev, userMsg]);
+    await sendToBackend(text);
+  };
 
   const handleSuggestion = (text: string) => {
-    if (isLoading) return
-    sendMessage(text)
-  }
+    if (isLoading) return;
+    sendMessage(text);
+  };
 
-  /** Nueva conversación: limpia mensajes, reinicia session_id y wizard */
-  const handleNewConversation = () => {
-    setMessages([])
-    localStorage.removeItem(MESSAGES_KEY)
-    const newId = crypto.randomUUID().replace(/-/g, '').slice(0, 32)
-    sessionIdRef.current = newId
-    localStorage.setItem(SESSION_KEY, newId)
-    wizard.resetWizard()
-  }
+  /** Resetea los mensajes, session_id y wizard (acción real de nueva conversación). */
+  const doNewConversation = () => {
+    setMessages([]);
+    localStorage.removeItem(MESSAGES_KEY);
+    const newId = crypto.randomUUID().replace(/-/g, "").slice(0, 32);
+    sessionIdRef.current = newId;
+    localStorage.setItem(SESSION_KEY, newId);
+    wizard.resetWizard();
+    sessionRatedRef.current = false;
+  };
 
   /**
-   * Cierre del chat: si hubo ≥2 respuestas del bot, muestra el modal de
-   * calificación antes de cerrar. Si no, cierra directamente.
+   * Nueva conversación: si hay ≥2 respuestas del bot, pide calificar la sesión
+   * antes de limpiar todo. Si no, resetea directamente.
+   */
+  const handleNewConversation = () => {
+    const nBotMessages = messages.filter((m) => m.role === "bot").length;
+    if (nBotMessages >= 2 && !sessionRatedRef.current) {
+      postRatingActionRef.current = "newConversation";
+      setShowRatingModal(true);
+    } else {
+      doNewConversation();
+    }
+  };
+
+  /**
+   * Cierre del chat: si hubo ≥2 respuestas del bot y aún no se ha calificado
+   * la sesión, muestra el modal de calificación antes de cerrar.
+   * Si ya se calificó (o hay pocos mensajes), cierra directamente.
    */
   const handleClose = () => {
-    const nBotMessages = messages.filter((m) => m.role === 'bot').length
-    if (nBotMessages >= 2) {
-      setShowRatingModal(true)
+    const nBotMessages = messages.filter((m) => m.role === "bot").length;
+    if (nBotMessages >= 2 && !sessionRatedRef.current) {
+      postRatingActionRef.current = "close";
+      setShowRatingModal(true);
     } else {
-      setIsOpen(false)
+      setIsOpen(false);
     }
-  }
+  };
 
   /**
    * Envía el feedback 👍/👎 de un mensaje individual.
    * Adjunta el contexto del mensaje (query anterior del usuario, respuesta, categoría).
    */
-  const handleMessageFeedback = async (msg: Message, rating: 1 | -1): Promise<void> => {
+  const handleMessageFeedback = async (
+    msg: Message,
+    rating: 1 | -1,
+  ): Promise<void> => {
     // Buscar la query del usuario justo antes de este mensaje del bot
-    const msgIndex = messages.findIndex((m) => m.id === msg.id)
+    const msgIndex = messages.findIndex((m) => m.id === msg.id);
     const precedingUser = messages
       .slice(0, msgIndex)
       .reverse()
-      .find((m) => m.role === 'user')
+      .find((m) => m.role === "user");
 
     await submitMessageFeedback({
-      session_id:  sessionIdRef.current,
-      message_id:  msg.id,
+      session_id: sessionIdRef.current,
+      message_id: msg.id,
       rating,
-      query:       precedingUser?.content,
-      respuesta:   msg.content,
-      categoria:   msg.categoria,
-      intent:      msg.intent,
-    })
-  }
+      query: precedingUser?.content,
+      respuesta: msg.content,
+      categoria: msg.categoria,
+      intent: msg.intent,
+    });
+  };
 
   /**
-   * Envía la calificación 1–5 ⭐ de la sesión completa y cierra el chat.
+   * Envía la calificación 1–5 ⭐ de la sesión completa.
+   * Marca la sesión como calificada para no volver a preguntar.
    */
-  const handleSessionRating = async (rating: number, comment: string): Promise<void> => {
-    const botMessages  = messages.filter((m) => m.role === 'bot')
-    const categorias   = [...new Set(
-      botMessages.map((m) => m.categoria).filter((c): c is string => !!c)
-    )]
+  const handleSessionRating = async (
+    rating: number,
+    comment: string,
+  ): Promise<void> => {
+    const botMessages = messages.filter((m) => m.role === "bot");
+    const categorias = [
+      ...new Set(
+        botMessages.map((m) => m.categoria).filter((c): c is string => !!c),
+      ),
+    ];
 
     await submitSessionFeedback({
-      session_id:     sessionIdRef.current,
+      session_id: sessionIdRef.current,
       rating,
-      comment:        comment || undefined,
-      n_messages:     messages.length,
+      comment: comment || undefined,
+      n_messages: messages.length,
       n_bot_messages: botMessages.length,
       categorias,
-    })
-    // El modal se cierra solo desde RatingModal (setTimeout) → onSkip → setShowRatingModal(false) → setIsOpen(false)
-  }
+    });
+    sessionRatedRef.current = true;
+    // El modal se cierra solo desde RatingModal (setTimeout) → onSkip → handleModalClose
+  };
 
-  /** Cierra el modal (ya sea tras enviar o al saltar) y cierra el chat. */
+  /**
+   * Cierra el modal. Marca la sesión como calificada (aunque se haya saltado)
+   * para no volver a preguntar. Según la acción pendiente, resetea la
+   * conversación o simplemente cierra el panel.
+   */
   const handleModalClose = () => {
-    setShowRatingModal(false)
-    setIsOpen(false)
-  }
+    setShowRatingModal(false);
+    sessionRatedRef.current = true;
+    if (postRatingActionRef.current === "newConversation") {
+      doNewConversation();
+    } else {
+      setIsOpen(false);
+    }
+  };
 
   // ── Indicador de estado del backend ────────────────────────────────────────
   const statusDot =
-    backendStatus === 'checking' ? '#F29A01'   // amarillo: verificando
-    : backendStatus === 'online'  ? '#00B87C'  // verde: conectado
-    : '#D8473A'                                // rojo: offline
+    backendStatus === "checking"
+      ? "#F29A01" // amarillo: verificando
+      : backendStatus === "online"
+        ? "#00B87C" // verde: conectado
+        : "#D8473A"; // rojo: offline
 
   const statusLabel =
-    backendStatus === 'checking' ? 'Conectando…'
-    : backendStatus === 'online'  ? 'Asistente institucional'
-    : 'Servicio no disponible'
+    backendStatus === "checking"
+      ? "Conectando…"
+      : backendStatus === "online"
+        ? "Asistente institucional"
+        : "Servicio no disponible";
 
   return (
     <>
       {/* ═══════════════ CHAT PANEL ═══════════════ */}
       <div
-        className={`chat-widget-panel ${isOpen ? 'chat-widget-open' : 'chat-widget-closed'}`}
+        className={`chat-widget-panel ${isOpen ? "chat-widget-open" : "chat-widget-closed"}`}
         style={{
-          position: 'fixed',
-          bottom: isFullscreen ? '0' : '96px',
-          right:  isFullscreen ? '0' : '24px',
-          width:  isFullscreen ? '100vw' : '520px',
-          height: isFullscreen ? '100vh' : '680px',
+          position: "fixed",
+          bottom: isFullscreen ? "0" : "96px",
+          right: isFullscreen ? "0" : "24px",
+          width: isFullscreen ? "100vw" : "520px",
+          height: isFullscreen ? "100vh" : "680px",
           zIndex: 9999,
-          display: 'flex',
-          flexDirection: 'column',
-          borderRadius: isFullscreen ? '0' : '16px',
-          overflow: 'hidden',
-          boxShadow: isOpen ? '0 12px 48px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05)' : 'none',
+          display: "flex",
+          flexDirection: "column",
+          borderRadius: isFullscreen ? "0" : "16px",
+          overflow: "hidden",
+          boxShadow: isOpen
+            ? "0 12px 48px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.05)"
+            : "none",
           opacity: isOpen ? 1 : 0,
-          transform: isOpen ? 'translateY(0) scale(1)' : 'translateY(20px) scale(0.95)',
-          pointerEvents: isOpen ? 'auto' : 'none',
-          transition: 'opacity 0.3s ease, transform 0.3s ease, width 0.3s ease, height 0.3s ease, bottom 0.3s ease, right 0.3s ease, border-radius 0.3s ease',
-          background: '#F2F6F9',
+          transform: isOpen
+            ? "translateY(0) scale(1)"
+            : "translateY(20px) scale(0.95)",
+          pointerEvents: isOpen ? "auto" : "none",
+          transition:
+            "opacity 0.3s ease, transform 0.3s ease, width 0.3s ease, height 0.3s ease, bottom 0.3s ease, right 0.3s ease, border-radius 0.3s ease",
+          background: "#F2F6F9",
         }}
       >
         {/* Panel Header */}
         <div
           style={{
-            background: 'linear-gradient(135deg, #001A34 0%, #0F385A 100%)',
-            padding: '14px 18px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
+            background: "linear-gradient(135deg, #001A34 0%, #0F385A 100%)",
+            padding: "14px 18px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
             flexShrink: 0,
           }}
         >
           <div
             style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '50%',
-              background: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              overflow: 'hidden',
-              border: '2px solid rgba(2,153,216,0.3)',
+              width: "38px",
+              height: "38px",
+              borderRadius: "50%",
+              background: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+              border: "2px solid rgba(2,153,216,0.3)",
               flexShrink: 0,
             }}
           >
             <img
               src="/Logo_1.png"
               alt="BravoBot"
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           </div>
           <div style={{ flex: 1 }}>
             <div
               style={{
-                color: '#fff',
+                color: "#fff",
                 fontFamily: '"Roboto Condensed", sans-serif',
                 fontWeight: 700,
-                fontSize: '16px',
+                fontSize: "16px",
                 lineHeight: 1.2,
               }}
             >
@@ -374,21 +456,21 @@ export default function ChatWidget() {
             </div>
             <div
               style={{
-                color: 'rgba(255,255,255,0.65)',
-                fontSize: '11px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
+                color: "rgba(255,255,255,0.65)",
+                fontSize: "11px",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
               }}
             >
               <span
                 style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
+                  width: "6px",
+                  height: "6px",
+                  borderRadius: "50%",
                   background: statusDot,
-                  display: 'inline-block',
-                  transition: 'background 0.4s',
+                  display: "inline-block",
+                  transition: "background 0.4s",
                 }}
               />
               {statusLabel}
@@ -400,24 +482,35 @@ export default function ChatWidget() {
             <button
               onClick={handleNewConversation}
               style={{
-                background: 'rgba(255,255,255,0.1)',
-                border: 'none',
-                borderRadius: '8px',
-                color: '#fff',
-                cursor: 'pointer',
-                padding: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'background 0.2s',
+                background: "rgba(255,255,255,0.1)",
+                border: "none",
+                borderRadius: "8px",
+                color: "#fff",
+                cursor: "pointer",
+                padding: "6px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "background 0.2s",
               }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.2)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "rgba(255,255,255,0.2)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "rgba(255,255,255,0.1)")
+              }
               aria-label="Nueva conversación"
               title="Nueva conversación"
             >
               {/* Pencil / new-chat icon */}
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
                 <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
               </svg>
             </button>
@@ -427,21 +520,25 @@ export default function ChatWidget() {
           <button
             onClick={() => setIsFullscreen((prev) => !prev)}
             style={{
-              background: 'rgba(255,255,255,0.1)',
-              border: 'none',
-              borderRadius: '8px',
-              color: '#fff',
-              cursor: 'pointer',
-              padding: '6px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'background 0.2s',
+              background: "rgba(255,255,255,0.1)",
+              border: "none",
+              borderRadius: "8px",
+              color: "#fff",
+              cursor: "pointer",
+              padding: "6px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "background 0.2s",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.2)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
-            aria-label={isFullscreen ? 'Restaurar tamaño' : 'Pantalla completa'}
-            title={isFullscreen ? 'Restaurar tamaño' : 'Pantalla completa'}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.background = "rgba(255,255,255,0.2)")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.background = "rgba(255,255,255,0.1)")
+            }
+            aria-label={isFullscreen ? "Restaurar tamaño" : "Pantalla completa"}
+            title={isFullscreen ? "Restaurar tamaño" : "Pantalla completa"}
           >
             {isFullscreen ? <RestoreIcon /> : <FullscreenIcon />}
           </button>
@@ -450,19 +547,23 @@ export default function ChatWidget() {
           <button
             onClick={handleClose}
             style={{
-              background: 'rgba(255,255,255,0.1)',
-              border: 'none',
-              borderRadius: '8px',
-              color: '#fff',
-              cursor: 'pointer',
-              padding: '6px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'background 0.2s',
+              background: "rgba(255,255,255,0.1)",
+              border: "none",
+              borderRadius: "8px",
+              color: "#fff",
+              cursor: "pointer",
+              padding: "6px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "background 0.2s",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.2)')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.background = "rgba(255,255,255,0.2)")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.background = "rgba(255,255,255,0.1)")
+            }
             aria-label="Cerrar chat"
           >
             <CloseIcon />
@@ -470,24 +571,32 @@ export default function ChatWidget() {
         </div>
 
         {/* Banner offline */}
-        {backendStatus === 'offline' && (
+        {backendStatus === "offline" && (
           <div
             style={{
-              background: '#D8473A',
-              color: '#fff',
-              fontSize: '11px',
+              background: "#D8473A",
+              color: "#fff",
+              fontSize: "11px",
               fontFamily: '"Open Sans", sans-serif',
-              padding: '6px 16px',
-              textAlign: 'center',
+              padding: "6px 16px",
+              textAlign: "center",
               flexShrink: 0,
             }}
           >
-            ⚠️ El servicio no está disponible en este momento. Intenta más tarde.
+            ⚠️ El servicio no está disponible en este momento. Intenta más
+            tarde.
           </div>
         )}
 
         {/* Chat body */}
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div
+          style={{
+            flex: 1,
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
           <ChatWindow
             messages={messages}
             isLoading={isLoading}
@@ -496,47 +605,49 @@ export default function ChatWidget() {
             onWizardAnswer={handleWizardAnswer}
             onMessageFeedback={handleMessageFeedback}
           />
-          <InputBar onSend={sendMessage} disabled={isLoading || backendStatus === 'offline'} />
+          <InputBar
+            onSend={sendMessage}
+            disabled={isLoading || backendStatus === "offline"}
+          />
         </div>
       </div>
 
       {/* ═══════════════ RATING MODAL ═══════════════ */}
       {showRatingModal && (
-        <RatingModal
-          onSubmit={handleSessionRating}
-          onSkip={handleModalClose}
-        />
+        <RatingModal onSubmit={handleSessionRating} onSkip={handleModalClose} />
       )}
 
       {/* ═══════════════ FLOATING BUTTON ═══════════════ */}
       <button
         id="chat-widget-toggle"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={isOpen ? handleClose : () => setIsOpen(true)}
         style={{
-          position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          width: '60px',
-          height: '60px',
-          borderRadius: '50%',
-          border: 'none',
-          cursor: 'pointer',
+          position: "fixed",
+          bottom: "24px",
+          right: "24px",
+          width: "60px",
+          height: "60px",
+          borderRadius: "50%",
+          border: "none",
+          cursor: "pointer",
           zIndex: 10000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'all 0.3s ease',
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "all 0.3s ease",
           background: isOpen
-            ? 'linear-gradient(135deg, #001A34 0%, #0F385A 100%)'
-            : 'linear-gradient(135deg, #0299D8 0%, #027ab5 100%)',
-          color: '#fff',
+            ? "linear-gradient(135deg, #001A34 0%, #0F385A 100%)"
+            : "linear-gradient(135deg, #0299D8 0%, #027ab5 100%)",
+          color: "#fff",
           boxShadow: isOpen
-            ? '0 4px 16px rgba(0,26,52,0.4)'
-            : '0 4px 20px rgba(2,153,216,0.45)',
-          overflow: 'hidden',
-          animation: isOpen ? 'none' : 'chatWidgetPulse 3s ease-in-out infinite',
+            ? "0 4px 16px rgba(0,26,52,0.4)"
+            : "0 4px 20px rgba(2,153,216,0.45)",
+          overflow: "hidden",
+          animation: isOpen
+            ? "none"
+            : "chatWidgetPulse 3s ease-in-out infinite",
         }}
-        aria-label={isOpen ? 'Cerrar chat' : 'Abrir chat con BravoBot'}
+        aria-label={isOpen ? "Cerrar chat" : "Abrir chat con BravoBot"}
       >
         {isOpen ? (
           <CloseIcon />
@@ -544,7 +655,12 @@ export default function ChatWidget() {
           <img
             src="/Logo_1.png"
             alt="BravoBot"
-            style={{ width: '42px', height: '42px', objectFit: 'cover', borderRadius: '50%' }}
+            style={{
+              width: "42px",
+              height: "42px",
+              objectFit: "cover",
+              borderRadius: "50%",
+            }}
           />
         )}
       </button>
@@ -553,33 +669,33 @@ export default function ChatWidget() {
       {!isOpen && (
         <div
           style={{
-            position: 'fixed',
-            bottom: '90px',
-            right: '24px',
-            background: '#001A34',
-            color: '#fff',
-            fontSize: '12px',
+            position: "fixed",
+            bottom: "90px",
+            right: "24px",
+            background: "#001A34",
+            color: "#fff",
+            fontSize: "12px",
             fontFamily: '"Open Sans", sans-serif',
             fontWeight: 600,
-            padding: '6px 14px',
-            borderRadius: '8px',
+            padding: "6px 14px",
+            borderRadius: "8px",
             zIndex: 10000,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            whiteSpace: 'nowrap',
-            animation: 'chatTooltipFade 0.5s ease 2s both',
-            pointerEvents: 'none',
+            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+            whiteSpace: "nowrap",
+            animation: "chatTooltipFade 0.5s ease 2s both",
+            pointerEvents: "none",
           }}
         >
           Chatea con BravoBot 💬
           <div
             style={{
-              position: 'absolute',
-              bottom: '-5px',
-              right: '20px',
-              width: '10px',
-              height: '10px',
-              background: '#001A34',
-              transform: 'rotate(45deg)',
+              position: "absolute",
+              bottom: "-5px",
+              right: "20px",
+              width: "10px",
+              height: "10px",
+              background: "#001A34",
+              transform: "rotate(45deg)",
             }}
           />
         </div>
@@ -606,5 +722,5 @@ export default function ChatWidget() {
         }
       `}</style>
     </>
-  )
+  );
 }
